@@ -204,6 +204,33 @@ Plus Tavily for each with `search_depth: "advanced"`.
 - Look for real benchmarks: "X benchmark comparison"
 - Russian-language search for additional angles
 
+### Step 2.3a-exa: EXA NEURAL CHANNEL (optional, parallel, v0.5.0+)
+
+> Fault-tolerant — if Exa MCP is not installed or `DEEP_RESEARCH_DISABLE_EXA=1` is set, this step is skipped. Independent from Codex — can run together or separately.
+
+Exa provides **neural semantic search** with its own index. Complements Tavily (keyword-ish) and Firecrawl (extraction). For L2 gap-fill, Exa's `web_search_advanced_exa` with category filters often finds sources Tavily misses.
+
+```
+mcp__exa__web_search_advanced_exa with:
+  query: <gap description from L2/gap-analysis.md>
+  num_results: 8
+  type: "auto"
+  category: "news"    # or "research paper" for technical gaps, omit for general
+  contents: { text: { max_characters: 20000 } }
+```
+
+Save the response JSON to `.firecrawl/research/$SLUG/L2/exa-gap.json` via the Write tool (same persistence pattern as Tavily — MCP responses don't survive context compaction).
+
+In Step 2.5 (contradictions) and Step 2.7 (synthesis), merge Exa findings:
+
+- URLs in Exa response but not in Tavily/Firecrawl → candidates for additional scrape
+- Exa's `score` field (relevance) can flag high-confidence sources
+- If Exa and Tavily point to conflicting sources → surface in `contradictions.md`
+
+**If Exa unavailable:** skip silently. The skill's existing Tavily+Firecrawl+Codex channels still work.
+
+See [docs/EXA_INTEGRATION.md](../../docs/EXA_INTEGRATION.md) for full integration reference.
+
 ### Step 2.3a: CODEX CROSS-MODEL CHANNEL (optional, parallel)
 
 > Added in v0.2. This step is **optional and fault-tolerant** — if Codex isn't installed, auth is expired, or it times out, the skill continues without it. The report notes which mode was used.

@@ -68,6 +68,30 @@ STAGE 2: L5 Ultra Layer
   8. MEMORY SYNC               — persist to auto-memory
 ```
 
+## Exa Deep-Researcher Channel (v0.5.0+)
+
+> **Optional per-iteration deep-dive channel.** Works alongside Codex (which is cross-model GPT-5.4) and the existing Tavily/Firecrawl. If Exa MCP is not installed, skip.
+
+L5 benefits from Exa's `deep_researcher_start` + `deep_researcher_check` async pattern because each L5 iteration can take 10+ minutes. Kick off Exa deep research at the start of each iteration, poll it later:
+
+```
+# Start of iteration N — fire-and-forget
+mcp__exa__deep_researcher_start with:
+  query: <iteration N sub-question>
+  # Returns: research_id
+
+# Later in iteration N (after other work)
+mcp__exa__deep_researcher_check with:
+  id: <research_id>
+# Returns: structured grounded answer with citations OR "still running"
+```
+
+Result is a **structured JSON answer** with every claim tied to a specific source URL — already formatted for RAG. Saves writing the equivalent Claude synthesis work for that sub-question.
+
+Save each response to `.firecrawl/research/$SLUG/L5/iterations/iter-N/exa-deep.json` for audit trail.
+
+**If Exa deep_researcher times out:** fall back to Exa's regular `web_search_advanced_exa` (faster, no multi-step reasoning). If Exa unavailable entirely: iteration proceeds Codex+Tavily only.
+
 ## Codex Cross-Model Channel (added v0.2)
 
 L5 uses Codex CLI (GPT-5.4 with live web search) in **two roles** within each recursive iteration:

@@ -175,6 +175,20 @@ Write `L3/perspective-plan.md`:
 
 Run 9 searches in parallel (3 queries × 3 angles) using Firecrawl + Tavily.
 
+**v0.5.0:** If Exa MCP is installed (check for `mcp__exa__*` tools availability), run additional Exa searches in parallel. Exa's neural ranking **excels at the critic and neutral angles** — it finds conceptually-related dissenting views that keyword search misses.
+
+```
+# Neutral angle via Exa with category filter
+mcp__exa__web_search_advanced_exa with:
+  query: <original query, framed neutrally>
+  category: "research paper"   # or omit for general news/web
+  type: "auto"
+  num_results: 10
+  contents: { text: { max_characters: 20000 } }
+```
+
+Save to `.firecrawl/research/$SLUG/L3/exa-neutral.json`. For **research paper category**, this is the single best source of independent academic content we have. Fall back to Tavily if Exa unavailable.
+
 > **v0.2.2: persist Tavily results.** After each `mcp__tavily__tavily_search` call, write the response JSON to `.firecrawl/research/$SLUG/L3/tavily-<angle>-<n>.json` (angle = proponent/critic/neutral, n = query index) using the Write tool. MCP responses live in conversation context only; disk persistence makes them auditable and survivable across compaction.
 
 Critical: use different search tactics per angle:

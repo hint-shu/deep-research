@@ -103,7 +103,23 @@ Open `~/.claude.json` (or create it) and add Tavily under `mcpServers`:
 
 Restart Claude Code to pick up the new MCP server.
 
-### 3. (Optional) Install OpenAI Codex CLI
+### 3. (Optional) Install Exa MCP — neural search channel (v0.5.0+)
+
+Adds a third search index (neural semantic search) alongside Tavily and Firecrawl. Free tier: 1,000 searches/month.
+
+1. Sign up at [exa.ai](https://exa.ai), get API key
+2. Install the MCP server with all tools:
+
+```bash
+claude mcp add --transport http exa \
+  'https://mcp.exa.ai/mcp?exaApiKey=YOUR_EXA_KEY&tools=web_search_exa,web_search_advanced_exa,get_code_context_exa,crawling_exa,company_research_exa,people_search_exa,deep_researcher_start,deep_researcher_check'
+```
+
+3. Restart Claude Code. Verify: `claude mcp list | grep exa` should show `✓ Connected`.
+
+Full integration guide: [docs/EXA_INTEGRATION.md](EXA_INTEGRATION.md).
+
+### 4. (Optional) Install OpenAI Codex CLI
 
 Only needed if you want the cross-model channel for L2+.
 
@@ -131,7 +147,7 @@ codex exec -c 'web_search="live"' --sandbox read-only \
 
 If this returns a sensible answer, Codex is ready.
 
-### 4. Clone and install skills
+### 5. Clone and install skills
 
 ```bash
 git clone https://github.com/hint-shu/deep-research.git

@@ -31,14 +31,51 @@ Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes
 
 ---
 
-## [Unreleased] — v0.5 (planned)
+## [Unreleased] — v0.6 (planned)
 
 ### Planned
 
-- Additional search backends (Kagi, Exa, Perplexity API)
+- Kagi and Perplexity API as additional search backends
 - Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
 - Streaming Codex output (start synthesis before full `-o` file written)
 - MCP-based Codex integration (replace Bash shell-out with structured tool calls)
+
+---
+
+## [0.5.0] — 2026-04-18
+
+### Added
+
+- **Exa MCP integration** — a third search channel alongside Tavily and Firecrawl, specializing in **neural semantic search** with its own index of billions of documents. Installed as an MCP server (symmetric with how Tavily is installed):
+
+  ```bash
+  claude mcp add --transport http exa \
+    'https://mcp.exa.ai/mcp?exaApiKey=YOUR_KEY&tools=web_search_exa,web_search_advanced_exa,...'
+  ```
+
+- **New docs: `docs/EXA_INTEGRATION.md`** — full guide covering tool selection, per-tier usage patterns, cost considerations, and decision matrix for when to pick Tavily vs Exa vs Codex.
+
+- **Per-tier Exa integration points:**
+  - **L2 `/deep-research`** — Exa `web_search_advanced_exa` as parallel gap-fill channel. Runs alongside Codex; disagreements between Tavily/Exa highlight potential contradictions.
+  - **L3 `/expert-research`** — Exa for neutral-angle research with `category` filters. Better at finding conceptually-related dissenting views than keyword search.
+  - **L4 `/academic-research`** — **biggest upgrade in v0.5.0.** Exa's `category: "research paper"` index (arXiv, paperswithcode, preprint servers) replaces previous "Tavily + academic keywords" approach. Academic results now automatically grade as Quality A in the bibliography.
+  - **L5 `/ultra-research`** — Exa's async `deep_researcher_start`/`deep_researcher_check` pattern kicks off at the start of each iteration, returns structured grounded answer while other iteration work runs.
+
+- **`DEEP_RESEARCH_DISABLE_EXA=1`** environment variable for users who want single-backend mode (symmetric with the Codex disable flag).
+
+- Exa setup step added to `docs/INSTALLATION.md` as optional Step 3.
+
+### Changed
+
+- Plugin manifest bumped to v0.5.0 (`plugin.json`, `marketplace.json`).
+
+### Notes on graceful degradation
+
+- Skills check for Exa MCP tool availability at runtime — if `mcp__exa__*` not present, the Exa step is skipped silently
+- All v0.4.0 behavior preserved for users who don't install Exa
+- Exa integration is additive — Firecrawl + Tavily + Codex still cover their existing roles
+
+---
 
 ---
 
