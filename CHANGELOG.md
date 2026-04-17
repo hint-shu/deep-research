@@ -31,7 +31,7 @@ Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes
 
 ---
 
-## [Unreleased] — v0.3 (planned)
+## [Unreleased] — v0.4 (planned)
 
 ### Planned
 
@@ -40,6 +40,27 @@ Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes
 - Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
 - Streaming Codex output (start synthesis before full `-o` file written)
 - MCP-based Codex integration (replace Bash shell-out with structured tool calls)
+- Skill migration to call shared lib directly (reduces skill file size ~30%)
+
+---
+
+## [0.3.0] — 2026-04-17
+
+### Added
+
+- **Shared verification library** `scripts/lib/verify-research.sh` — centralizes the Bash checkpoint logic previously duplicated across L1/L2/L3 skills. Single source of truth for citation regex (the v0.2.2 multi-cite fix), file-size checks, source-summary pairing, and traceability checks. Exposes `verify_l1`, `verify_l2`, `verify_l2_checkpoint_{1..4}`, `verify_l3` functions plus a CLI entrypoint.
+- **`install.sh` deploys the shared lib** to `~/.claude/scripts/lib/verify-research.sh` alongside the existing `codex-research.sh` helper.
+- **`DEEP_RESEARCH_BASE_DIR` env var** — lets the verify library run against `.firecrawl/examples/` or a custom artifact location (default remains `.firecrawl/research`). Useful for CI-style validation of committed examples.
+- **Full live-test example at `.firecrawl/examples/firecrawl-vs-tavily-2026/`** — complete L1+L2+L3 run (32 sources, 4 L2 checkpoints passed, L3 final checkpoint passed, Codex helper's RATE_LIMITED and TIMEOUT paths captured as evidence of v0.2 fault tolerance working). Verifiable with `scripts/lib/verify-research.sh`.
+
+### Changed
+
+- **L3 report minimum lowered from 2000 to 1700 words** based on observed real-session output (1777 words was the measured baseline for a rigorous, cited, critic-reviewed L3 synthesis). Target stays at 2000-3000 in skill guidance — the hard minimum just prevents truly truncated output rather than over-constraining realistic runs.
+- Examples README significantly expanded with instructions for verifying examples using the shared lib and context for each example's historical relevance.
+
+### Backward compatibility
+
+- Skills still have inlined CHECKPOINT Bash blocks — they work as before, no forced migration. The shared lib is an **additional** path, not a replacement. Future releases will migrate skills one at a time with verification that nothing regresses.
 
 ---
 

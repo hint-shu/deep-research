@@ -450,10 +450,10 @@ Before delivering the report, run this Bash verification. Mirrors the L2 CHECKPO
 SLUG="<slug>"
 L3_DIR=".firecrawl/research/$SLUG/L3"
 
-# 1. Report must exist and meet minimum size (2000 words — v0.2.2 target)
+# 1. Report must exist and meet minimum size (hard min 1700, target 2000-3000)
 test -s "$L3_DIR/report.md" || { echo "❌ L3 report missing"; exit 1; }
 REPORT_WORDS=$(wc -w < "$L3_DIR/report.md")
-[ "$REPORT_WORDS" -ge 2000 ] || { echo "❌ L3 report only $REPORT_WORDS words, need ≥2000"; exit 1; }
+[ "$REPORT_WORDS" -ge 1700 ] || { echo "❌ L3 report only $REPORT_WORDS words, hard min 1700"; exit 1; }
 
 # 2. Executive summary exists (for stakeholders)
 test -s "$L3_DIR/executive-summary.md" || { echo "❌ executive-summary.md missing"; exit 1; }

@@ -75,12 +75,23 @@ echo ""
 echo -e "${C_GREEN}Installed $installed skill(s).${C_RESET}"
 echo ""
 
-# --- Install shared helper scripts (used by L2+ skills) ---
+# --- Install shared helper scripts and library (used by L2+ skills) ---
 if [ -f "$SCRIPT_DIR/codex-research.sh" ]; then
     mkdir -p "$SCRIPTS_DST"
     cp "$SCRIPT_DIR/codex-research.sh" "$SCRIPTS_DST/codex-research.sh"
     chmod +x "$SCRIPTS_DST/codex-research.sh"
     echo -e "Installed helper: ${C_GREEN}$SCRIPTS_DST/codex-research.sh${C_RESET}"
+fi
+
+# --- Shared verification library (v0.3.0+) ---
+if [ -d "$SCRIPT_DIR/lib" ]; then
+    mkdir -p "$SCRIPTS_DST/lib"
+    for libfile in "$SCRIPT_DIR/lib"/*.sh; do
+        [ -f "$libfile" ] || continue
+        cp "$libfile" "$SCRIPTS_DST/lib/"
+        chmod +x "$SCRIPTS_DST/lib/$(basename "$libfile")"
+    done
+    echo -e "Installed shared lib: ${C_GREEN}$SCRIPTS_DST/lib/${C_RESET}"
     echo ""
 fi
 
