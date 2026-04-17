@@ -249,47 +249,26 @@ Write `bibliography.md`:
 
 ## 🛑 FINAL VERIFICATION (before delivering the report)
 
-Run this Bash block. If any check fails, fix the underlying problem — do NOT ship a broken L1 report (downstream L2/L3/L4/L5 depend on it being correct).
+Run this Bash block. If verification fails, fix the underlying problem — do NOT ship a broken L1 report (downstream L2/L3/L4/L5 depend on it being correct).
+
+**v0.4.0:** verification logic now lives in the shared library at `~/.claude/scripts/lib/verify-research.sh` (installed by `scripts/install.sh`). Skills call it instead of inlining 30+ lines of Bash. Single source of truth for citation regex, size thresholds, and source-pair counting. Fixing a check in one place updates every tier.
 
 ```bash
 SLUG="<slug>"                  # replace with actual slug
-L1_DIR=".firecrawl/research/$SLUG/L1"
 
-# 1. Plan must exist
-test -s "$L1_DIR/plan.md" || { echo "❌ plan.md missing"; exit 1; }
+# Locate the shared verification library.
+# Prefer the installed copy; fall back to repo-local if running without install.sh.
+VERIFY_LIB="$HOME/.claude/scripts/lib/verify-research.sh"
+[ -f "$VERIFY_LIB" ] || VERIFY_LIB="scripts/lib/verify-research.sh"
+[ -f "$VERIFY_LIB" ] || { echo "❌ verify-research.sh not found — run scripts/install.sh first"; exit 1; }
 
-# 2. Report must exist and be substantive
-test -s "$L1_DIR/report.md" || { echo "❌ report.md missing"; exit 1; }
-REPORT_WORDS=$(wc -w < "$L1_DIR/report.md")
-[ "$REPORT_WORDS" -ge 700 ] || { echo "❌ Report only $REPORT_WORDS words, need ≥700"; exit 1; }
-
-# 3. Bibliography must exist and be non-empty
-test -s "$L1_DIR/bibliography.md" || { echo "❌ bibliography.md missing"; exit 1; }
-
-# 4. Need ≥10 scrape+summary pairs
-SRC_COUNT=$(ls "$L1_DIR"/sources/*.md 2>/dev/null | grep -vc '\.sum\.md$' | tr -d ' ')
-SUM_COUNT=$(ls "$L1_DIR"/sources/*.sum.md 2>/dev/null | wc -l | tr -d ' ')
-[ "$SRC_COUNT" -ge 10 ] || { echo "❌ Only $SRC_COUNT source scrapes, need ≥10"; exit 1; }
-[ "$SUM_COUNT" -eq "$SRC_COUNT" ] || { echo "❌ $SUM_COUNT summaries vs $SRC_COUNT scrapes — mismatch"; exit 1; }
-
-# 5. Each scrape non-trivial (≥500 bytes)
-for f in "$L1_DIR"/sources/*.md; do
-    echo "$f" | grep -q '\.sum\.md$' && continue
-    SIZE=$(wc -c < "$f")
-    [ "$SIZE" -ge 500 ] || { echo "❌ $f is $SIZE bytes — likely error page"; exit 1; }
-done
-
-# 6. Every [N] citation in report must exist in bibliography
-#    Handles both single [N] and multi-citation [N, M, K] formats (v0.2.2 fix)
-CITATIONS=$(grep -oE '\[[0-9][0-9, ]*\]' "$L1_DIR/report.md" | tr -d '[] ' | tr ',' '\n' | grep -vE '^$' | sort -un)
-for N in $CITATIONS; do
-    grep -qE "^${N}\." "$L1_DIR/bibliography.md" || { echo "❌ Citation [${N}] missing from bibliography"; exit 1; }
-done
-
-echo "✅ L1 VERIFIED: $SRC_COUNT sources, $SUM_COUNT summaries, $REPORT_WORDS-word report, citations traceable"
+source "$VERIFY_LIB"
+verify_l1 "$SLUG" || exit 1
 ```
 
 **Only deliver the report to the user after this prints `✅ L1 VERIFIED`.**
+
+The `verify_l1` function checks: plan exists; report ≥700 words; bibliography present; ≥10 scrape+summary pairs; each source ≥500 bytes; every `[N]` citation (including multi-cite `[1, 3, 16]`) maps to a bibliography entry.
 
 ## Final output to user
 

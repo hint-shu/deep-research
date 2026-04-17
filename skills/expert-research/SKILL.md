@@ -442,49 +442,22 @@ Structure:
 
 Write separate `L3/executive-summary.md` — 500 words max. For stakeholders who won't read the full report. Plain language, no jargon.
 
-### 🛑 L3 FINAL CHECKPOINT (added v0.2.2)
+### 🛑 L3 FINAL CHECKPOINT (added v0.2.2, shared-lib'd v0.4.0)
 
-Before delivering the report, run this Bash verification. Mirrors the L2 CHECKPOINT 4 discipline — L3 was previously only prose-level verified, which was a regression from L2.
+Before delivering the report, run this verification. Mirrors the L2 CHECKPOINT discipline — L3 was previously only prose-level verified, which was a regression from L2.
 
 ```bash
 SLUG="<slug>"
-L3_DIR=".firecrawl/research/$SLUG/L3"
 
-# 1. Report must exist and meet minimum size (hard min 1700, target 2000-3000)
-test -s "$L3_DIR/report.md" || { echo "❌ L3 report missing"; exit 1; }
-REPORT_WORDS=$(wc -w < "$L3_DIR/report.md")
-[ "$REPORT_WORDS" -ge 1700 ] || { echo "❌ L3 report only $REPORT_WORDS words, hard min 1700"; exit 1; }
+VERIFY_LIB="$HOME/.claude/scripts/lib/verify-research.sh"
+[ -f "$VERIFY_LIB" ] || VERIFY_LIB="scripts/lib/verify-research.sh"
+[ -f "$VERIFY_LIB" ] || { echo "❌ verify-research.sh not found — run scripts/install.sh"; exit 1; }
 
-# 2. Executive summary exists (for stakeholders)
-test -s "$L3_DIR/executive-summary.md" || { echo "❌ executive-summary.md missing"; exit 1; }
-
-# 3. Critic report exists (from subagent — MANDATORY per skill rules)
-test -s "$L3_DIR/critic-report.md" || { echo "❌ critic-report.md missing — critic subagent was not invoked"; exit 1; }
-
-# 4. Fact-check exists (top 5 claims verified)
-test -s "$L3_DIR/fact-check.md" || { echo "❌ fact-check.md missing"; exit 1; }
-
-# 5. Bibliography exists
-test -s "$L3_DIR/bibliography.md" || { echo "❌ bibliography.md missing"; exit 1; }
-
-# 6. Perspective plan (3-angle) exists
-test -s "$L3_DIR/perspective-plan.md" || { echo "❌ perspective-plan.md missing"; exit 1; }
-
-# 7. L3 source summaries exist (≥8 new sources beyond L1/L2)
-L3_SUM_COUNT=$(ls "$L3_DIR"/sources/*.sum.md 2>/dev/null | wc -l | tr -d ' ')
-[ "$L3_SUM_COUNT" -ge 8 ] || { echo "❌ Only $L3_SUM_COUNT L3 summaries, need ≥8"; exit 1; }
-
-# 8. Citation traceability — multi-citation safe regex (v0.2.2)
-CITATIONS=$(grep -oE '\[[0-9][0-9, ]*\]' "$L3_DIR/report.md" | tr -d '[] ' | tr ',' '\n' | grep -vE '^$' | sort -un)
-for N in $CITATIONS; do
-    grep -qE "^${N}\." "$L3_DIR/bibliography.md" || {
-        echo "❌ Citation [${N}] in L3 report but not in bibliography"
-        exit 1
-    }
-done
-
-echo "✅ L3 FINAL CHECKPOINT PASSED: $REPORT_WORDS-word report, $L3_SUM_COUNT L3 sources, bibliography + critic + fact-check verified, all citations traceable"
+source "$VERIFY_LIB"
+verify_l3 "$SLUG" || exit 1
 ```
+
+The function checks: report ≥1700 words (target 2000-3000); executive summary, critic report (subagent output), fact-check, bibliography, perspective plan all present; ≥8 L3 source summaries; every `[N]` citation (including multi-cite formats) maps to a bibliography entry.
 
 **Only proceed to PDF export (Step 2.10) after this prints `✅ L3 FINAL CHECKPOINT PASSED`.**
 

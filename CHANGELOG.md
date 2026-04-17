@@ -31,16 +31,55 @@ Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes
 
 ---
 
-## [Unreleased] — v0.4 (planned)
+## [Unreleased] — v0.5 (planned)
 
 ### Planned
 
-- Claude Code plugin marketplace packaging (one-command install via marketplace)
 - Additional search backends (Kagi, Exa, Perplexity API)
 - Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
 - Streaming Codex output (start synthesis before full `-o` file written)
 - MCP-based Codex integration (replace Bash shell-out with structured tool calls)
-- Skill migration to call shared lib directly (reduces skill file size ~30%)
+
+---
+
+## [0.4.0] — 2026-04-17
+
+### Added
+
+- **Claude Code plugin manifest** — `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json` at repo root. Enables one-command install via Claude Code's plugin system:
+  ```
+  /plugin install hint-shu/deep-research
+  ```
+  No more `git clone + bash install.sh` required for users on Claude Code 2.1.30+. Manual install remains available as a fallback.
+
+### Changed
+
+- **Migrated L1, L2, L3 skills to source the shared verification library** instead of inlining CHECKPOINT Bash. Each skill now has:
+  ```bash
+  VERIFY_LIB="$HOME/.claude/scripts/lib/verify-research.sh"
+  [ -f "$VERIFY_LIB" ] || VERIFY_LIB="scripts/lib/verify-research.sh"
+  source "$VERIFY_LIB"
+  verify_l{1,2,3}_checkpoint_N "$SLUG" || exit 1
+  ```
+  instead of ~30 lines of inline Bash per checkpoint.
+
+- **Skill size reduction** (lines of markdown/code):
+  - `research/SKILL.md`: 320 → 299 (-21)
+  - `deep-research/SKILL.md`: 596 → 508 (**-88**, biggest win — 4 CHECKPOINTs collapsed)
+  - `expert-research/SKILL.md`: 530 → 503 (-27)
+  - Total: -136 lines (-5.2% across affected skills)
+
+  Skill files are loaded into Claude's context every time the skill is invoked. Thinner skills = less prompt bloat for users.
+
+### Regression-tested
+
+- All 3 tiers (L1, L2 all 4 CHECKPOINTs, L3 FINAL) pass on the flagship example using the shared library after migration. No behavioral change — just centralization.
+
+### Backward compatibility
+
+- Fallback path in skill Bash: skills try `$HOME/.claude/scripts/lib/verify-research.sh` first, then `scripts/lib/verify-research.sh`, then error. Covers plugin installs, `install.sh` installs, and in-repo development runs.
+
+---
 
 ---
 

@@ -237,4 +237,4 @@ Good first issues:
 - **[Tavily](https://tavily.com)** — search API для research
 - **[OpenAI Codex CLI](https://developers.openai.com/codex)** — опциональный cross-model канал
 
-Изначально спроектировано [@owerhint](https://github.com/owerhint) как внутренний research-инструментарий. Выложено в open-source, потому что хороший систематический ресерч не должен быть закрытым знанием.
+Изначально спроектировано [@hint-shu](https://github.com/hint-shu) как внутренний research-инструментарий. Выложено в open-source, потому что хороший систематический ресерч не должен быть закрытым знанием.

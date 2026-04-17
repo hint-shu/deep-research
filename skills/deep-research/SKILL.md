@@ -108,35 +108,20 @@ Wait for L1 to complete.
 
 ### 🛑 CHECKPOINT 1: Verify L1 Foundation
 
-Run this Bash block. If ANY check fails, abort L2 and report the L1 problem to the user.
+**v0.4.0:** uses shared verification library. See [verify-research.sh](../../scripts/lib/verify-research.sh) for the actual checks.
 
 ```bash
 SLUG="<slug>"                  # replace with actual slug
-L1_DIR=".firecrawl/research/$SLUG/L1"
 
-# 1. Plan must exist
-test -s "$L1_DIR/plan.md" || { echo "❌ L1 plan.md missing or empty"; exit 1; }
+VERIFY_LIB="$HOME/.claude/scripts/lib/verify-research.sh"
+[ -f "$VERIFY_LIB" ] || VERIFY_LIB="scripts/lib/verify-research.sh"
+[ -f "$VERIFY_LIB" ] || { echo "❌ verify-research.sh not found — run scripts/install.sh"; exit 1; }
 
-# 2. Report must exist and be non-trivial
-test -s "$L1_DIR/report.md" || { echo "❌ L1 report.md missing or empty"; exit 1; }
-REPORT_LINES=$(wc -l < "$L1_DIR/report.md")
-[ "$REPORT_LINES" -ge 30 ] || { echo "❌ L1 report too short ($REPORT_LINES lines)"; exit 1; }
-
-# 3. Bibliography must exist
-test -s "$L1_DIR/bibliography.md" || { echo "❌ L1 bibliography.md missing"; exit 1; }
-
-# 4. At least 10 source summaries present
-SUM_COUNT=$(ls "$L1_DIR"/sources/*.sum.md 2>/dev/null | wc -l | tr -d ' ')
-[ "$SUM_COUNT" -ge 10 ] || { echo "❌ L1 only has $SUM_COUNT summaries, need ≥10"; exit 1; }
-
-# 5. Each summary has a matching source file
-SRC_COUNT=$(ls "$L1_DIR"/sources/*.md 2>/dev/null | grep -vc '\.sum\.md$' | tr -d ' ')
-[ "$SRC_COUNT" -ge 10 ] || { echo "❌ L1 only has $SRC_COUNT source scrapes, need ≥10"; exit 1; }
-
-echo "✅ CHECKPOINT 1 PASSED: L1 has $SUM_COUNT summaries, $SRC_COUNT scrapes, report ($REPORT_LINES lines)"
+source "$VERIFY_LIB"
+verify_l2_checkpoint_1 "$SLUG" || exit 1
 ```
 
-**Only proceed if this prints `✅ CHECKPOINT 1 PASSED`.**
+**Only proceed if this prints `✅ CHECKPOINT 1 PASSED`.** The function verifies L1 foundation (plan, report, bibliography, ≥10 summaries, ≥10 matching scrapes). If L1 didn't produce these artifacts, abort L2 and report the L1 problem to the user.
 
 ---
 
@@ -271,24 +256,11 @@ The status file will say one of: `SUCCESS`, `SKIPPED`, `AUTH_FAILED`, `RATE_LIMI
 ### 🛑 CHECKPOINT 2: Verify Searches Produced URLs
 
 ```bash
-# Must have at least 2 search files
-SEARCH_COUNT=$(ls .firecrawl/research/$SLUG/L2/search-*.json 2>/dev/null | wc -l | tr -d ' ')
-[ "$SEARCH_COUNT" -ge 2 ] || { echo "❌ Only $SEARCH_COUNT search files — re-run Step 2.3"; exit 1; }
-
-# Each search file must have results
-for f in .firecrawl/research/$SLUG/L2/search-*.json; do
-    SIZE=$(wc -c < "$f")
-    [ "$SIZE" -ge 500 ] || { echo "❌ $f is tiny ($SIZE bytes) — search likely failed"; exit 1; }
-done
-
-# Must have unique URLs to scrape (combine Firecrawl + Tavily results; require ≥10 unique)
-URL_COUNT=$(cat .firecrawl/research/$SLUG/L2/search-*.json 2>/dev/null | jq -r '[.. | .url? // empty] | unique | .[]' 2>/dev/null | wc -l | tr -d ' ')
-[ "$URL_COUNT" -ge 10 ] || { echo "❌ Only $URL_COUNT unique URLs across searches — need ≥10"; exit 1; }
-
-echo "✅ CHECKPOINT 2 PASSED: $SEARCH_COUNT searches, $URL_COUNT unique URLs ready to scrape"
+source "$VERIFY_LIB"
+verify_l2_checkpoint_2 "$SLUG" || exit 1
 ```
 
-**Only proceed if this prints `✅ CHECKPOINT 2 PASSED`.**
+Checks: ≥2 search JSON files, each non-trivially sized (≥500 bytes), ≥10 unique URLs total. **Only proceed if this prints `✅ CHECKPOINT 2 PASSED`.**
 
 ### Step 2.4: READ + SUMMARIZE (MANDATORY — DO NOT SKIP)
 
@@ -337,41 +309,11 @@ After scraping, write a `.sum.md` summary companion for EACH scraped file (same 
 > **This is the most important checkpoint in the pipeline.** Skipping it is how "hollow synthesis" happens.
 
 ```bash
-L2_SRC=".firecrawl/research/$SLUG/L2/sources"
-
-# 1. Count scraped source files (not .sum.md)
-SCRAPE_COUNT=$(ls "$L2_SRC"/*.md 2>/dev/null | grep -vc '\.sum\.md$' | tr -d ' ')
-[ "$SCRAPE_COUNT" -ge 8 ] || {
-    echo "❌ CRITICAL: Only $SCRAPE_COUNT L2 sources scraped, need ≥8"
-    echo "    Re-run Step 2.4 — DO NOT write the report yet"
-    exit 1
-}
-
-# 2. Each scrape must be non-trivial (>500 bytes — anything less is probably an error page)
-for f in "$L2_SRC"/*.md; do
-    echo "$f" | grep -q '\.sum\.md$' && continue
-    SIZE=$(wc -c < "$f")
-    [ "$SIZE" -ge 500 ] || { echo "❌ $f is only $SIZE bytes — likely error page. Re-scrape."; exit 1; }
-done
-
-# 3. Each scrape has a matching .sum.md summary
-SUM_COUNT=$(ls "$L2_SRC"/*.sum.md 2>/dev/null | wc -l | tr -d ' ')
-[ "$SUM_COUNT" -eq "$SCRAPE_COUNT" ] || {
-    echo "❌ Summary count ($SUM_COUNT) doesn't match scrape count ($SCRAPE_COUNT)"
-    echo "    Write a .sum.md for each scraped source before proceeding"
-    exit 1
-}
-
-# 4. Summaries must be non-trivial (each ≥300 words ≈ ≥2000 bytes)
-for f in "$L2_SRC"/*.sum.md; do
-    SIZE=$(wc -c < "$f")
-    [ "$SIZE" -ge 1000 ] || { echo "❌ Summary $f too short ($SIZE bytes, need ≥1000)"; exit 1; }
-done
-
-echo "✅ CHECKPOINT 3 PASSED: $SCRAPE_COUNT scrapes, all non-trivial, all summarized"
+source "$VERIFY_LIB"
+verify_l2_checkpoint_3 "$SLUG" || exit 1
 ```
 
-**If this checkpoint fails, DO NOT write the L2 report. Fix the scraping first.**
+Checks: ≥8 L2 scrapes, each ≥500 bytes (not error page), each has matching `.sum.md` companion ≥1000 bytes. **If this fails, DO NOT write the L2 report. Re-run the scrape step.**
 
 ### Step 2.5: CONTRADICTION DETECTION
 
@@ -498,41 +440,11 @@ Write `L2/bibliography.md` merging L1 and L2 sources. Keep L1 numbering intact (
 ### 🛑 CHECKPOINT 4: Final Verification Before Delivering Report
 
 ```bash
-L2_DIR=".firecrawl/research/$SLUG/L2"
-
-# 1. Report must exist and be substantive
-test -s "$L2_DIR/report.md" || { echo "❌ L2 report missing"; exit 1; }
-REPORT_WORDS=$(wc -w < "$L2_DIR/report.md")
-[ "$REPORT_WORDS" -ge 1500 ] || { echo "❌ L2 report only $REPORT_WORDS words, need ≥1500"; exit 1; }
-
-# 2. Bibliography must exist and be non-empty
-test -s "$L2_DIR/bibliography.md" || { echo "❌ L2 bibliography missing"; exit 1; }
-
-# 3. Contradictions file must exist (even if empty/no-contradictions)
-test -f "$L2_DIR/contradictions.md" || { echo "❌ contradictions.md not created"; exit 1; }
-
-# 4. Confidence file must exist
-test -f "$L2_DIR/confidence.md" || { echo "❌ confidence.md not created"; exit 1; }
-
-# 5. Gap analysis and follow-up plan must exist
-test -s "$L2_DIR/gap-analysis.md" || { echo "❌ gap-analysis.md missing"; exit 1; }
-test -s "$L2_DIR/followup-plan.md" || { echo "❌ followup-plan.md missing"; exit 1; }
-
-# 6. Every [N] citation in the report must exist in bibliography
-#    Handles both single [N] and multi-citation [N, M, K] formats (v0.2.2 fix).
-#    Without the comma-split, multi-citations like [1, 3, 16] were silently
-#    missed by the earlier regex, allowing hallucinated citation numbers to
-#    pass verification when they appeared in multi-cite form.
-CITATIONS=$(grep -oE '\[[0-9][0-9, ]*\]' "$L2_DIR/report.md" | tr -d '[] ' | tr ',' '\n' | grep -vE '^$' | sort -un)
-for N in $CITATIONS; do
-    grep -qE "^${N}\." "$L2_DIR/bibliography.md" || {
-        echo "❌ Citation [${N}] in report but not in bibliography"
-        exit 1
-    }
-done
-
-echo "✅ CHECKPOINT 4 PASSED: $REPORT_WORDS-word report, bibliography verified, all citations traceable"
+source "$VERIFY_LIB"
+verify_l2_checkpoint_4 "$SLUG" || exit 1
 ```
+
+Checks: L2 report ≥1500 words; bibliography, contradictions, confidence, gap-analysis, followup-plan all present; every `[N]` citation (including multi-cite `[1, 3, 16]`) maps to a bibliography entry.
 
 **Only deliver the report to the user if this prints `✅ CHECKPOINT 4 PASSED`.**
 

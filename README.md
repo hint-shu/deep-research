@@ -238,4 +238,4 @@ Built on top of:
 - **[Tavily](https://tavily.com)** — research-grade search API
 - **[OpenAI Codex CLI](https://developers.openai.com/codex)** — optional cross-model channel
 
-Originally designed by [@owerhint](https://github.com/owerhint) as an internal research toolkit, open-sourced because good systematic research should not be a closely-guarded secret.
+Originally designed by [@hint-shu](https://github.com/hint-shu) as an internal research toolkit, open-sourced because good systematic research should not be a closely-guarded secret.
