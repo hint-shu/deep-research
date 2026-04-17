@@ -6,31 +6,6 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [0.2.2] — 2026-04-17
-
-Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes regressions and bugs surfaced during real research runs, not theorized ones.
-
-### Fixed
-
-- **Citation regex silently missed multi-citations** (L1, L2, L3). The prior regex `\[[0-9]+\]` only matched single-number brackets like `[1]`, completely missing `[1, 3, 16]` formats. This meant citation-traceability CHECKPOINTs could false-pass on reports where hallucinated references appeared inside multi-cite groups. New regex `\[[0-9][0-9, ]*\]` plus comma-split catches both formats.
-- **L3 had no formal Bash-enforced FINAL CHECKPOINT** — regression from L2's 4-checkpoint discipline. Added `🛑 L3 FINAL CHECKPOINT` block verifying report, executive summary, critic report, fact-check, bibliography, perspective plan, ≥8 L3 sources, and citation traceability before delivery.
-- **Codex timeouts were too aggressive for higher tiers.** L3 calls include a 200-line L2 report as context + require web search; 240s was failing routinely. New defaults: L2=180s (unchanged), L3=360s, L4=360s, L5=420s (Researcher C) / 300s (fact-checker).
-- **Codex helper was silent on WHY timeouts happened** — stderr was only shown in status if failure was classified. Now the full Codex stderr is always preserved as `<output>.log` sidecar, regardless of success/failure. Essential for diagnosing whether Codex died during auth handshake, mid-search, or during synthesis.
-- **L3 report target (3000-4500 words) was unrealistic** for single-session execution without heavy subagent delegation. Relaxed to 2000-3000 in v0.2.2 skill docs + updated FINAL CHECKPOINT minimum to 2000.
-
-### Added
-
-- **Tavily result persistence instructions** in L1, L2, L3 skills. Tavily MCP responses live in conversation context only by default — if compaction hits, they're lost and CHECKPOINTs can't audit them. Skills now instruct Claude to `Write` each Tavily response JSON to disk (`tavily-N.json` in the appropriate L*/ folder).
-- **L3 budget section** now documents subagent token cost (~50-80K for critic agent) and Codex token cost (~200-300K across 2 parallel calls) — previously only Tavily credits were budgeted.
-
-### Known limitations deferred to v0.3
-
-- Shared verification bash script (skills would link instead of inlining ~30 lines each)
-- PDF export fallback chain (pandoc → weasyprint → wkhtmltopdf → HTML) — currently pandoc → HTML
-- Full Russian translation of ARCHITECTURE.md and TROUBLESHOOTING.md
-
----
-
 ## [Unreleased] — v0.7 (planned)
 
 ### Planned
@@ -182,6 +157,37 @@ Skills pick which to invoke based on tier and query shape. All additive — no i
 ### Backward compatibility
 
 - Skills still have inlined CHECKPOINT Bash blocks — they work as before, no forced migration. The shared lib is an **additional** path, not a replacement. Future releases will migrate skills one at a time with verification that nothing regresses.
+
+---
+
+## [0.2.2] — 2026-04-17
+
+Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes regressions and bugs surfaced during real research runs, not theorized ones.
+
+### Fixed
+
+- **Citation regex silently missed multi-citations** (L1, L2, L3). The prior regex `\[[0-9]+\]` only matched single-number brackets like `[1]`, completely missing `[1, 3, 16]` formats. This meant citation-traceability CHECKPOINTs could false-pass on reports where hallucinated references appeared inside multi-cite groups. New regex `\[[0-9][0-9, ]*\]` plus comma-split catches both formats.
+- **L3 had no formal Bash-enforced FINAL CHECKPOINT** — regression from L2's 4-checkpoint discipline. Added `🛑 L3 FINAL CHECKPOINT` block verifying report, executive summary, critic report, fact-check, bibliography, perspective plan, ≥8 L3 sources, and citation traceability before delivery.
+- **Codex timeouts were too aggressive for higher tiers.** L3 calls include a 200-line L2 report as context + require web search; 240s was failing routinely. New defaults: L2=180s (unchanged), L3=360s, L4=360s, L5=420s (Researcher C) / 300s (fact-checker).
+- **Codex helper was silent on WHY timeouts happened** — stderr was only shown in status if failure was classified. Now the full Codex stderr is always preserved as `<output>.log` sidecar, regardless of success/failure. Essential for diagnosing whether Codex died during auth handshake, mid-search, or during synthesis.
+- **L3 report target (3000-4500 words) was unrealistic** for single-session execution without heavy subagent delegation. Relaxed to 2000-3000 in v0.2.2 skill docs + updated FINAL CHECKPOINT minimum to 2000.
+
+### Added
+
+- **Tavily result persistence instructions** in L1, L2, L3 skills. Tavily MCP responses live in conversation context only by default — if compaction hits, they're lost and CHECKPOINTs can't audit them. Skills now instruct Claude to `Write` each Tavily response JSON to disk (`tavily-N.json` in the appropriate L*/ folder).
+- **L3 budget section** now documents subagent token cost (~50-80K for critic agent) and Codex token cost (~200-300K across 2 parallel calls) — previously only Tavily credits were budgeted.
+
+---
+
+## [0.2.1] — 2026-04-17
+
+### Fixed
+
+- **Codex helper success-first classification.** v0.2.0's helper checked stderr for auth/rate-limit patterns **before** checking success. Codex 0.120.0 emits non-fatal MCP transport warnings (including occasional `invalid_grant` messages from a background subsystem) to stderr during normal execution — the helper was false-flagging these as `AUTH_FAILED` and deleting valid Codex output. Reordered: success (exit 0 + non-empty output) now wins, stderr noise is preserved as `<output>.stderr` sidecar for debugging but doesn't trigger failure classification.
+- Auth-failure detection tightened to avoid matching benign MCP subsystem patterns.
+
+### Verified end-to-end
+- Real web-search query returned a current answer with live URL; status `SUCCESS`, exit 0. Previously this same call was classified `AUTH_FAILED` and output deleted.
 
 ---
 
