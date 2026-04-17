@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-compatible-blue.svg)](https://claude.com/claude-code)
-[![Status](https://img.shields.io/badge/status-v0.1.1-orange.svg)]()
+[![Status](https://img.shields.io/badge/status-v0.6.0-brightgreen.svg)]()
 [![Русский](https://img.shields.io/badge/lang-Русский-red.svg)](README.ru.md)
 
 ---
@@ -54,9 +54,11 @@ This ladder solves each:
 - [Firecrawl CLI](https://www.firecrawl.dev) — scraping engine
 - [Tavily MCP](https://tavily.com) — search API (free tier works)
 
-**Optional (L2+ cross-model channel):**
+**Optional add-ons (each skill degrades gracefully if absent):**
 
-- [OpenAI Codex CLI](https://developers.openai.com/codex/cli) + ChatGPT Pro subscription
+- [Exa MCP](https://exa.ai) — neural semantic search (L2+, v0.5.0+) · free tier 1000/mo
+- [Perplexity MCP](https://perplexity.ai) — answer engine (L0+ killer path, v0.6.0+)
+- [OpenAI Codex CLI](https://developers.openai.com/codex/cli) — cross-model channel (L2+, v0.2.0+) · needs ChatGPT Pro
 
 Full setup: see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
@@ -210,6 +212,11 @@ Total cost if you stick to free tiers: **$0**. With Codex: existing ChatGPT Pro 
 
 - [x] v0.1 — Six-tier research ladder (L0→L5)
 - [x] v0.1 — Firecrawl + Tavily integration
+- [x] v0.2 — Optional Codex CLI cross-model channel
+- [x] v0.3 — Shared verification library + flagship example
+- [x] v0.4 — Claude Code plugin manifest + skill migration
+- [x] v0.5 — Exa MCP (neural semantic search)
+- [x] v0.6 — Perplexity MCP (answer engine)
 - [ ] v0.2 — Codex CLI cross-model channel (L2+)
 - [ ] v0.2 — L2 hardening (verification checkpoints, scrape enforcement)
 - [ ] v0.3 — Claude Code plugin marketplace distribution
