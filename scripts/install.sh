@@ -11,6 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_SRC="$REPO_ROOT/skills"
 SKILLS_DST="$HOME/.claude/skills"
+SCRIPTS_DST="$HOME/.claude/scripts"
 
 # --- colors ---
 if [ -t 1 ]; then
@@ -73,6 +74,15 @@ fi
 echo ""
 echo -e "${C_GREEN}Installed $installed skill(s).${C_RESET}"
 echo ""
+
+# --- Install shared helper scripts (used by L2+ skills) ---
+if [ -f "$SCRIPT_DIR/codex-research.sh" ]; then
+    mkdir -p "$SCRIPTS_DST"
+    cp "$SCRIPT_DIR/codex-research.sh" "$SCRIPTS_DST/codex-research.sh"
+    chmod +x "$SCRIPTS_DST/codex-research.sh"
+    echo -e "Installed helper: ${C_GREEN}$SCRIPTS_DST/codex-research.sh${C_RESET}"
+    echo ""
+fi
 
 # --- post-install check ---
 echo "Verifying..."

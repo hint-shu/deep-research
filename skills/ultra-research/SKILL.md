@@ -54,11 +54,11 @@ STAGE 1: Execute /academic-research (L4)
 
 STAGE 2: L5 Ultra Layer
   1. SATURATION PLANNING       — define stop condition
-  2. COORDINATOR SETUP         — spawn the full crew
+  2. COORDINATOR SETUP         — spawn the full crew (Codex = parallel fact-checker, added v0.2)
   3. RECURSIVE EXPLORATION     — loop until saturation
      ├─ Planner: next questions
-     ├─ Researcher A/B/C: parallel gathering
-     ├─ Fact-checker: verify claims
+     ├─ Researcher A/B/C: parallel gathering (Researcher C = Codex)
+     ├─ Fact-checker: verify claims (Claude + Codex dual-model cross-check)
      ├─ Critic: attack findings
      └─ Loop check: new facts? continue : stop
   4. PEER-REVIEW SIMULATION    — 3 independent critic passes
@@ -67,6 +67,45 @@ STAGE 2: L5 Ultra Layer
   7. COUNTER-ARGUMENTS         — steel-man opposing views
   8. MEMORY SYNC               — persist to auto-memory
 ```
+
+## Codex Cross-Model Channel (added v0.2)
+
+L5 uses Codex CLI (GPT-5.4 with live web search) in **two roles** within each recursive iteration:
+
+**Role 1: Researcher C** — independent parallel research per iteration.
+**Role 2: Dual-model fact-checker** — Codex verifies claims Claude made, Claude verifies claims Codex made. Disagreements flag for the critic.
+
+Per-iteration invocation pattern (pseudocode; real skill runs inside the loop):
+
+```bash
+CODEX_HELPER="$HOME/.claude/scripts/codex-research.sh"
+[ -x "$CODEX_HELPER" ] || CODEX_HELPER="scripts/codex-research.sh"
+
+ITER=1
+while ! saturated; do
+    ITER_DIR=".firecrawl/research/$SLUG/L5/iterations/iter-$ITER"
+    mkdir -p "$ITER_DIR"
+
+    if [ -x "$CODEX_HELPER" ]; then
+        # Researcher C for this iteration
+        bash "$CODEX_HELPER" 300 \
+            "$ITER_DIR/codex-researcher-c.md" \
+            "<prompt targeting this iteration's sub-questions>" &
+
+        # Fact-check of last iteration's claims
+        bash "$CODEX_HELPER" 180 \
+            "$ITER_DIR/codex-factcheck.md" \
+            "<fact-check prompt reading previous iteration's main findings>" &
+
+        wait
+    fi
+
+    # Claude does its iteration work, then merges Codex outputs if present
+    ITER=$((ITER+1))
+done
+```
+
+**Fault tolerance:** if Codex is unavailable in any iteration, that iteration proceeds single-model and the peer-review pass (Step 4) gets a note: `Iteration N: Codex unavailable (<status>). Single-model.` L5 still reaches saturation, just with Claude-only cross-checking in those iterations.
 
 ## Artifacts Directory — Full Knowledge Base
 

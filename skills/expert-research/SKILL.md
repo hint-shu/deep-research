@@ -222,6 +222,57 @@ Write `L3/fact-check.md`:
 - **DISPUTED** — sources disagree, needs careful framing
 - **UNVERIFIED** — couldn't find independent confirmation (downgrade in report)
 
+### Step 2.4a: CODEX CROSS-MODEL CHANNEL (optional, added v0.2)
+
+> Fault-tolerant — if Codex is unavailable, skill continues single-model.
+
+Spawn **two parallel Codex calls** for independent second-model perspective: a neutral-angle research pass and a cross-model critic pass. These run in parallel with Step 2.5 (Claude critic agent).
+
+```bash
+CODEX_HELPER="$HOME/.claude/scripts/codex-research.sh"
+[ -x "$CODEX_HELPER" ] || CODEX_HELPER="scripts/codex-research.sh"
+
+# Call 1: Neutral-angle researcher (GPT-5.4 with its own index)
+if [ -x "$CODEX_HELPER" ]; then
+    bash "$CODEX_HELPER" 240 \
+        ".firecrawl/research/$SLUG/L3/codex-neutral.md" \
+        "You are an independent research assistant. Research the query '<ORIGINAL QUERY>' from a skeptical, neutral angle — ignore vendor marketing and hype. Look for benchmarks, independent reviewers, community experiences, and failures. Return 8-12 key findings with source URLs. Include dates. Be concise (≤1000 words)." &
+    CODEX_NEUTRAL_PID=$!
+
+    # Call 2: Cross-model critic (reads the L2 report and attacks conclusions)
+    L2_REPORT=$(cat ".firecrawl/research/$SLUG/L2/report.md" 2>/dev/null | head -300)
+    bash "$CODEX_HELPER" 240 \
+        ".firecrawl/research/$SLUG/L3/codex-critic.md" \
+        "You are a skeptical research critic. Review this research report adversarially. Challenge main conclusions. Find what's missing, wrong, or oversimplified. Use your own web search to verify or refute key claims. Return a critic report (≤1000 words).
+
+REPORT TO REVIEW:
+$L2_REPORT" &
+    CODEX_CRITIC_PID=$!
+else
+    CODEX_NEUTRAL_PID=""
+    CODEX_CRITIC_PID=""
+fi
+```
+
+Proceed to Step 2.5 (Claude critic) while these run. After Step 2.5 finishes:
+
+```bash
+[ -n "$CODEX_NEUTRAL_PID" ] && wait "$CODEX_NEUTRAL_PID" 2>/dev/null
+[ -n "$CODEX_CRITIC_PID" ]  && wait "$CODEX_CRITIC_PID" 2>/dev/null
+
+# Log status outcomes
+for f in codex-neutral codex-critic; do
+    STATUS_FILE=".firecrawl/research/$SLUG/L3/${f}.md.status"
+    [ -f "$STATUS_FILE" ] && echo "$f: $(cat "$STATUS_FILE")"
+done
+```
+
+When writing the final L3 synthesis (Step 2.8), **merge Codex findings with Claude findings**:
+
+- If `L3/codex-critic.md` exists — include its objections in the report's "Weaknesses / counterpoints" section
+- If `L3/codex-neutral.md` exists — cross-check its facts against Claude's conclusions, flag any disagreements in `contradictions.md`
+- If Codex outputs absent (check `.status` files) — note in Confidence section: `Cross-model verification: unavailable (<reason>). Report is single-model.`
+
 ### Step 2.5: CRITIC AGENT (adversarial review)
 
 **Invoke a critic sub-agent** to attack the L2 report. Use the Agent tool with a dedicated prompt:

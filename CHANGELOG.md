@@ -6,13 +6,46 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [Unreleased] — v0.2 (planned)
+## [Unreleased] — v0.3 (planned)
 
 ### Planned
 
-- Codex CLI cross-model channel integrated into L2+ skills
-- Environment variable `DEEP_RESEARCH_DISABLE_CODEX=1` for users who want single-model mode
-- Full Russian translation of ARCHITECTURE, CODEX_INTEGRATION, TROUBLESHOOTING
+- Claude Code plugin marketplace packaging (one-command install via marketplace)
+- Additional search backends (Kagi, Exa, Perplexity API)
+- Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
+- Streaming Codex output (start synthesis before full `-o` file written)
+- MCP-based Codex integration (replace Bash shell-out with structured tool calls)
+
+---
+
+## [0.2.0] — 2026-04-17
+
+### Added
+
+- **Codex CLI cross-model channel** integrated into L2, L3, L4, and L5 skills:
+  - **L2 `/deep-research`**: parallel gap-filler during scrape phase — output to `L2/codex-gap.md`
+  - **L3 `/expert-research`**: two parallel Codex calls (neutral-angle researcher + cross-model critic) alongside Claude's critic agent
+  - **L4 `/academic-research`**: Codex as Researcher C in the multi-agent crew, complementing Researcher A (web) and Researcher B (academic)
+  - **L5 `/ultra-research`**: Codex as Researcher C AND dual-model fact-checker, invoked in every recursive iteration until knowledge saturation
+- **Fault-tolerant helper** `scripts/codex-research.sh` (installed to `~/.claude/scripts/` by `install.sh`):
+  - Auto-detects and handles 5 failure modes: disabled, not installed, auth expired, rate-limited, timeout
+  - Cross-platform timeout (native `timeout` → `gtimeout` → `perl -e 'alarm'` fallback — works on macOS by default)
+  - Returns distinct exit codes (124/125/126/127/128) and writes human-readable `.status` file next to output
+  - Removes partial output on any failure so synthesis can never accidentally read garbage
+- **`DEEP_RESEARCH_DISABLE_CODEX=1`** environment variable to force single-model mode
+- **Russian translation** of `docs/CODEX_INTEGRATION.md` → `docs/ru/CODEX_INTEGRATION.md`
+- **Updated `install.sh`** to deploy the Codex helper to `~/.claude/scripts/codex-research.sh`
+
+### Changed
+
+- Skills now explicitly note single-model vs cross-model mode in confidence sections of reports
+- Status file (`<output>.md.status`) added so skills can route the pipeline based on Codex outcome
+- Contradiction detection in L2+ now explicitly reads Codex output when present
+
+### Not broken
+
+- All L0/L1 behavior unchanged — L1 still works identically for downstream skills
+- Skills fall back gracefully when Codex unavailable — the ladder works standalone in single-model mode
 
 ---
 

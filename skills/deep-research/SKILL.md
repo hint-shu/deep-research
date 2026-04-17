@@ -217,6 +217,55 @@ Plus Tavily for each with `search_depth: "advanced"`.
 - Look for real benchmarks: "X benchmark comparison"
 - Russian-language search for additional angles
 
+### Step 2.3a: CODEX CROSS-MODEL CHANNEL (optional, parallel)
+
+> Added in v0.2. This step is **optional and fault-tolerant** — if Codex isn't installed, auth is expired, or it times out, the skill continues without it. The report notes which mode was used.
+
+Run a parallel research pass through OpenAI Codex CLI (GPT-5.4 with live web search). This gives a second, independent search index and model — disagreements between Claude's findings and Codex's findings are the strongest signal for `contradictions.md`.
+
+```bash
+# Prefer installed helper (from install.sh), fallback to repo-local copy.
+CODEX_HELPER="$HOME/.claude/scripts/codex-research.sh"
+[ -x "$CODEX_HELPER" ] || CODEX_HELPER="scripts/codex-research.sh"
+
+CODEX_GAP_PROMPT="You are a research assistant working in parallel with another model on this query:
+
+<ORIGINAL QUERY>
+
+Focus specifically on filling these gaps identified in the first-pass research:
+- <gap 1 from L2/gap-analysis.md>
+- <gap 2 from L2/gap-analysis.md>
+
+Return 5-10 key facts with source URLs. Include recent critiques and contrarian viewpoints if relevant. Be concise (≤800 words)."
+
+# Runs in background in parallel with Step 2.4 scrape.
+# Fail-open: if helper missing or codex fails, skill continues.
+if [ -x "$CODEX_HELPER" ]; then
+    bash "$CODEX_HELPER" 180 \
+        ".firecrawl/research/$SLUG/L2/codex-gap.md" \
+        "$CODEX_GAP_PROMPT" &
+    CODEX_PID=$!
+else
+    echo "⏭️  Codex helper not found — skipping cross-model channel"
+    CODEX_PID=""
+fi
+```
+
+**After Step 2.4 (scrape) completes, wait for Codex and record the outcome:**
+
+```bash
+if [ -n "$CODEX_PID" ]; then
+    wait "$CODEX_PID" 2>/dev/null
+    if [ -s ".firecrawl/research/$SLUG/L2/codex-gap.md" ]; then
+        echo "✅ Codex cross-model channel: output available"
+    else
+        cat ".firecrawl/research/$SLUG/L2/codex-gap.md.status" 2>/dev/null
+    fi
+fi
+```
+
+The status file will say one of: `SUCCESS`, `SKIPPED`, `AUTH_FAILED`, `RATE_LIMITED`, `TIMEOUT`, `FAILED`. Use this in Step 2.5 (contradictions) and Step 2.7 (synthesis) to decide whether to incorporate Codex findings.
+
 ### 🛑 CHECKPOINT 2: Verify Searches Produced URLs
 
 ```bash
@@ -324,7 +373,9 @@ echo "✅ CHECKPOINT 3 PASSED: $SCRAPE_COUNT scrapes, all non-trivial, all summa
 
 ### Step 2.5: CONTRADICTION DETECTION
 
-Read all summaries (L1 + L2). Look for **direct disagreements**:
+Read all summaries (L1 + L2). **If `L2/codex-gap.md` exists, read it too** — Codex's independent findings often surface contradictions Claude's scrapes miss.
+
+Look for **direct disagreements**:
 
 - Two sources claim different numbers
 - Two sources recommend opposite approaches
@@ -361,6 +412,10 @@ Write `L2/confidence.md` listing major claims with their grade.
 Produce `L2/report.md` — this **supersedes** `L1/report.md`.
 
 **Before writing, re-read ALL `.sum.md` files (both L1 and L2).** The report must synthesize from summaries, not from memory of what you searched.
+
+**If `L2/codex-gap.md` exists and has content**, incorporate its findings alongside Claude's findings. Mark Codex-sourced facts with `(cross-model)` tag in the report so the reader knows which claims have two-model backing (higher confidence) vs one-model (lower confidence).
+
+**If Codex was unavailable** (check `L2/codex-gap.md.status`): add a note to the Confidence Summary section: `Note: single-model run — Codex channel was <SKIPPED|AUTH_FAILED|TIMEOUT|...>. Claims have Claude-only verification.`
 
 ```markdown
 # <Topic Title>

@@ -98,6 +98,30 @@ Args: <query> (note: running as L4 foundation, skip plan approval)
 
 Wait for L3 completion. Verify L3 artifacts exist before proceeding.
 
+## Stage 1a: Codex as Researcher C (optional, added v0.2)
+
+> Fault-tolerant — if Codex is unavailable, the crew runs with 2 researchers instead of 3. Skill continues.
+
+As part of the multi-agent crew (Step 2 below), **Researcher C = Codex CLI (GPT-5.4 with live search)**. This gives the crew a genuinely different model with a different search index, complementing Researcher A (Claude general web) and Researcher B (Claude academic).
+
+Launch Researcher C as soon as L3 finishes, in parallel with the crew setup:
+
+```bash
+CODEX_HELPER="$HOME/.claude/scripts/codex-research.sh"
+[ -x "$CODEX_HELPER" ] || CODEX_HELPER="scripts/codex-research.sh"
+
+if [ -x "$CODEX_HELPER" ]; then
+    bash "$CODEX_HELPER" 300 \
+        ".firecrawl/research/$SLUG/L4/crew/researcher-c-output.md" \
+        "You are Researcher C in an academic-grade research crew. Topic: <ORIGINAL QUERY>. Researchers A and B are covering general web and academic databases. Your role: find ADJACENT-field sources and independent evaluations that the others might miss. Look at conference talks, industry reports, niche communities, non-English sources where relevant. Return 10-15 findings with URLs and brief context (≤1500 words). Include source type (industry-report | conference | community | trade-publication | other)." &
+    CODEX_C_PID=$!
+else
+    CODEX_C_PID=""
+fi
+```
+
+Wait for Researcher C after the crew's Critic step completes. If it produced output, incorporate its findings in Step 8 (Academic Synthesis) with `(Researcher C / cross-model)` citations. If not (status file explains why), the crew proceeds as 2-researcher.
+
 ## Stage 2: L4 Academic Layer
 
 ### Step 2.1: ACADEMIC PLANNING
