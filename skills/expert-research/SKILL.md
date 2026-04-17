@@ -210,6 +210,22 @@ Save to `L3/sources/` starting from the next available number.
 
 ### Step 2.4: FACT-CHECK CRITICAL CLAIMS
 
+**v0.6.0+: use Perplexity for fact-checks.** Perplexity is purpose-built for citation-grounded Q&A — cheaper and more focused than invoking Codex for verification of 5 short claims.
+
+```
+# For each of the top 5 critical claims:
+mcp__perplexity-ask__perplexity_ask with:
+  messages: [{role: "user", content: "Verify this claim and find independent sources that support or dispute it: <claim>. Return: verdict (CONFIRMED/DISPUTED/UNVERIFIED), 2-3 supporting/disputing sources with URLs, one-sentence rationale."}]
+```
+
+Save each response to `.firecrawl/research/$SLUG/L3/perplexity-factcheck-<n>.json`. Combine Perplexity's verdicts with the manual fact-check process below:
+
+- If Perplexity says CONFIRMED + our manual check confirms → High confidence
+- If Perplexity says DISPUTED + our manual check flagged → include caveat in report
+- Disagreements between Perplexity and manual → re-run with Codex as tiebreaker
+
+If Perplexity unavailable, skill proceeds with manual fact-check only (existing pre-v0.6 behavior).
+
 Read L2/report.md + L3 new summaries. Identify the **top 5 most critical claims** — ones that would change the recommendation if wrong.
 
 For each, verify against 2+ **independent** sources (not from the same vendor/author):

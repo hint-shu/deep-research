@@ -204,6 +204,27 @@ Plus Tavily for each with `search_depth: "advanced"`.
 - Look for real benchmarks: "X benchmark comparison"
 - Russian-language search for additional angles
 
+### Step 2.3a-pplx: PERPLEXITY ANSWER CHANNEL (optional, parallel, v0.6.0+)
+
+> Fault-tolerant — if Perplexity MCP isn't installed or `DEEP_RESEARCH_DISABLE_PERPLEXITY=1` is set, this step is skipped silently.
+
+Perplexity returns an **already-synthesized answer with citations** — a different output shape from Tavily/Exa (URL lists) and Codex (raw model response). For L2 contradictions, this gives a third independent "opinion" that can be directly cross-checked against Claude's synthesis of scraped sources.
+
+```
+mcp__perplexity-ask__perplexity_ask with:
+  messages: [{role: "user", content: "Research gap: <gap description from L2/gap-analysis.md>. Include inline [N] citations and Sources: list."}]
+```
+
+Save the response to `.firecrawl/research/$SLUG/L2/perplexity-gap.json` via the Write tool.
+
+In Step 2.5 (contradictions), compare Perplexity's answer against Claude's L2 synthesis:
+
+- **Same conclusion, same sources** → high confidence
+- **Same conclusion, different sources** → triangulation (good)
+- **Different conclusion** → flag in `contradictions.md` and investigate which is right
+
+Perplexity's citations are candidate URLs for additional Firecrawl scraping if they're not already in L1/L2 sources.
+
 ### Step 2.3a-exa: EXA NEURAL CHANNEL (optional, parallel, v0.5.0+)
 
 > Fault-tolerant — if Exa MCP is not installed or `DEEP_RESEARCH_DISABLE_EXA=1` is set, this step is skipped. Independent from Codex — can run together or separately.

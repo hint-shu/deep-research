@@ -31,14 +31,59 @@ Patch release based on end-to-end live testing of the full L0→L3 ladder. Fixes
 
 ---
 
-## [Unreleased] — v0.6 (planned)
+## [Unreleased] — v0.7 (planned)
 
 ### Planned
 
-- Kagi and Perplexity API as additional search backends
+- Kagi as additional quality-search backend for consumer research use cases
 - Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
 - Streaming Codex output (start synthesis before full `-o` file written)
 - MCP-based Codex integration (replace Bash shell-out with structured tool calls)
+
+---
+
+## [0.6.0] — 2026-04-18
+
+### Added
+
+- **Perplexity MCP integration** — fourth research channel, classified as an **answer engine** (vs Tavily/Exa's "URL list" output and Codex's "raw model response"). Perplexity returns a synthesized answer with inline citations in one call — specifically tuned for citation-grounded Q&A.
+
+- **Official Perplexity MCP server** (`server-perplexity-ask`) installable via:
+  ```bash
+  claude mcp add perplexity-ask -e "PERPLEXITY_API_KEY=pplx-..." -- npx -y server-perplexity-ask
+  ```
+
+- **New docs: `docs/PERPLEXITY_INTEGRATION.md`** — integration reference with per-tier usage, model selection guide (sonar/sonar-pro/sonar-deep-research/sonar-reasoning), cost matrix, and comparison table vs Exa's deep_researcher.
+
+- **Per-tier Perplexity integration:**
+  - **L0 `/quick-research`** — **primary killer use case.** Replaces 3-step Tavily-search + Firecrawl-scrape + Claude-synthesis pipeline with one Perplexity call. Drops L0 latency from ~1 minute to ~5 seconds. Skill falls back to classic L0 path if Perplexity unavailable or quality-check fails.
+  - **L2 `/deep-research`** — Perplexity answer as third parallel channel alongside Tavily/Exa for contradiction-surfacing. Three independent "opinions" triangulate.
+  - **L3 `/expert-research` Step 2.4 (fact-check)** — Perplexity verifies top-5 critical claims. Cheaper and more focused than invoking Codex for short verification queries.
+  - **L5 `/ultra-research`** — per-iteration fact-verifier alongside Codex. Codex challenges Claude's reasoning, Perplexity grounds claims in current citations — complementary not overlapping.
+
+- **`DEEP_RESEARCH_DISABLE_PERPLEXITY=1`** environment variable for single-backend mode.
+
+- Perplexity setup added to `docs/INSTALLATION.md` as optional Step 4.
+
+### Research ecosystem — v0.6.0 overview
+
+The stack now has four tool categories:
+
+| Category | Tool | Output shape |
+|----------|------|--------------|
+| Extraction | Firecrawl | Full page content |
+| Keyword discovery | Tavily | Ranked URLs + snippets |
+| Neural discovery | Exa (v0.5.0) | Semantic-ranked URLs + content |
+| **Answer engine** | **Perplexity (v0.6.0)** | **Synthesized answer + citations** |
+| Cross-model | Codex (v0.2.0, optional) | GPT-5.4 second opinion |
+
+Skills pick which to invoke based on tier and query shape. All additive — no installs are mandatory beyond Firecrawl and Tavily.
+
+### Changed
+
+- Plugin manifest bumped to v0.6.0.
+
+---
 
 ---
 

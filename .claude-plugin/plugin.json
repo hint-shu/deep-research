@@ -1,6 +1,6 @@
 {
   "name": "deep-research",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Systematic research ladder for Claude Code — six composable skills (L0→L5) from 60s fact-check to 40-min academic-grade investigation. Firecrawl + Tavily powered.",
   "author": {
     "name": "hint-shu",

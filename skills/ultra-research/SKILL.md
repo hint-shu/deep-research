@@ -68,6 +68,24 @@ STAGE 2: L5 Ultra Layer
   8. MEMORY SYNC               — persist to auto-memory
 ```
 
+## Perplexity Fact-Verifier (v0.6.0+)
+
+At the end of each recursive iteration, run Perplexity as a fast fact-verifier on the iteration's top claims:
+
+```
+# For each top 3-5 claims from iter-N's findings:
+mcp__perplexity-ask__perplexity_ask with:
+  messages: [{role: "user", content: "Verify: <claim>. Confirm or dispute with current sources."}]
+```
+
+Save verdicts to `.firecrawl/research/$SLUG/L5/iterations/iter-N/perplexity-verify.json`. Feed into the iteration's `peer-review-N.md` artifact.
+
+**Why both Codex AND Perplexity?** They measure different things:
+- Codex = "what does a different model think about this?" (challenges Claude's reasoning)
+- Perplexity = "what do current web sources say about this?" (grounds claims in citations)
+
+Runs in parallel with Codex at each iteration's peer-review phase. If either unavailable, skill continues with the available ones.
+
 ## Exa Deep-Researcher Channel (v0.5.0+)
 
 > **Optional per-iteration deep-dive channel.** Works alongside Codex (which is cross-model GPT-5.4) and the existing Tavily/Firecrawl. If Exa MCP is not installed, skip.

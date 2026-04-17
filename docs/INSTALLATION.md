@@ -119,7 +119,22 @@ claude mcp add --transport http exa \
 
 Full integration guide: [docs/EXA_INTEGRATION.md](EXA_INTEGRATION.md).
 
-### 4. (Optional) Install OpenAI Codex CLI
+### 4. (Optional) Install Perplexity MCP — answer-engine channel (v0.6.0+)
+
+Adds a fourth research tool category — **answer engine** that returns synthesized answers with citations, not just URLs. Kills L0 fact-check latency (one call vs search+scrape+synthesize).
+
+1. Sign up at [perplexity.ai](https://perplexity.ai/settings/api), get API key
+2. Install the official MCP server:
+
+```bash
+claude mcp add perplexity-ask -e "PERPLEXITY_API_KEY=pplx-YOUR_KEY" -- npx -y server-perplexity-ask
+```
+
+3. Restart Claude Code. Verify: `claude mcp list | grep perplexity` should show `✓ Connected`.
+
+Full integration guide: [docs/PERPLEXITY_INTEGRATION.md](PERPLEXITY_INTEGRATION.md).
+
+### 5. (Optional) Install OpenAI Codex CLI
 
 Only needed if you want the cross-model channel for L2+.
 
@@ -147,7 +162,7 @@ codex exec -c 'web_search="live"' --sandbox read-only \
 
 If this returns a sensible answer, Codex is ready.
 
-### 5. Clone and install skills
+### 6. Clone and install skills
 
 ```bash
 git clone https://github.com/hint-shu/deep-research.git
