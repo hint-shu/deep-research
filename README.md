@@ -62,13 +62,23 @@ Full setup: see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ### Install
 
+**Option 1 — Claude Code plugin (v0.4.0+, one-liner):**
+
+```
+/plugin install hint-shu/deep-research
+```
+
+Installs all six skills, the shared verification library, and the Codex helper in one command. Requires Claude Code 2.1.30+.
+
+**Option 2 — manual (works on any Claude Code version):**
+
 ```bash
 git clone https://github.com/hint-shu/deep-research.git
 cd deep-research
 bash scripts/install.sh
 ```
 
-The script copies `skills/*` into `~/.claude/skills/` and prints next-step instructions for API keys.
+The script copies `skills/*` into `~/.claude/skills/`, deploys the shared lib to `~/.claude/scripts/lib/`, and prints next-step instructions for API keys.
 
 ### First run
 
