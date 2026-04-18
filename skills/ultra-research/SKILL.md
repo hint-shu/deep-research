@@ -66,7 +66,35 @@ STAGE 2: L5 Ultra Layer
   6. PLAYBOOK GENERATION       — actionable artifacts
   7. COUNTER-ARGUMENTS         — steel-man opposing views
   8. MEMORY SYNC               — persist to auto-memory
+  9. OBSIDIAN EXPORT (v0.7+)   — optional vault export
 ```
+
+## Step 9: Obsidian Export (v0.7.0+)
+
+After the knowledge vault is fully written to `.firecrawl/research/$SLUG/L5/`, optionally export it to the user's Obsidian vault with wiki-links, YAML frontmatter, and tags. Entirely opt-in — runs only when `OBSIDIAN_VAULT` env var points to a real vault.
+
+```bash
+EXPORT_LIB="$HOME/.claude/scripts/lib/obsidian-export.sh"
+[ -f "$EXPORT_LIB" ] || EXPORT_LIB="scripts/lib/obsidian-export.sh"
+
+if [ -f "$EXPORT_LIB" ]; then
+    source "$EXPORT_LIB"
+    export_l5_to_obsidian "$SLUG"
+    # Function returns 0 on success OR skip (no OBSIDIAN_VAULT set)
+    # Returns 1 only on actual error (vault path invalid)
+    # Check the status file for the detailed outcome:
+    cat ".firecrawl/research/$SLUG/L5/obsidian-sync.status" 2>/dev/null
+fi
+```
+
+Outcomes:
+
+- `SUCCESS: exported N files to <vault path>` → vault available in Obsidian
+- `SKIPPED: OBSIDIAN_VAULT env var not set` → user didn't configure, ignored
+- `SKIPPED: Obsidian sync disabled via DEEP_RESEARCH_DISABLE_OBSIDIAN` → user opted out
+- `ERROR: <reason>` → path invalid or source missing; flag to user, don't block
+
+See [docs/OBSIDIAN_INTEGRATION.md](../../docs/OBSIDIAN_INTEGRATION.md) for full setup.
 
 ## Perplexity Fact-Verifier (v0.6.0+)
 

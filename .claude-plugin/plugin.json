@@ -1,6 +1,6 @@
 {
   "name": "deep-research",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Claude Code research ladder: 6 composable skills (L0→L5) from 60s fact-check to 40-min academic investigation. Stack: Firecrawl (scrape) + Tavily (discovery) + Exa (neural) + Perplexity (answer engine) + optional Codex (cross-model).",
   "author": {
     "name": "hint-shu",

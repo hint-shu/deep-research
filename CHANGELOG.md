@@ -6,14 +6,48 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versioning: [S
 
 ---
 
-## [Unreleased] — v0.7 (planned)
+## [Unreleased] — v0.8 (planned)
 
 ### Planned
 
-- Kagi as additional quality-search backend for consumer research use cases
 - Full Russian translation of ARCHITECTURE and TROUBLESHOOTING
-- Streaming Codex output (start synthesis before full `-o` file written)
-- MCP-based Codex integration (replace Bash shell-out with structured tool calls)
+- Real-world L5 validation run (end-to-end full-stack test)
+- Marketing: HN/Reddit/Twitter distribution
+
+### Explicitly dropped from roadmap
+
+- ~~MCP-based Codex integration~~ — aesthetic refactor without user value. Helper works, proven in v0.2.2 tests. Wrapping it as MCP wouldn't remove the onboarding friction (user still needs `brew install codex + codex auth login`). Would add ~500 lines of Node.js to maintain for zero functional improvement.
+- ~~Streaming Codex output~~ — 1-2 min L3 latency improvement isn't worth the complexity. L3 target is ~20 min, current actual is ~18-22 min — we're already within target. Optimization for optimization's sake.
+
+---
+
+## [0.7.0] — 2026-04-18
+
+### Added
+
+- **Obsidian auto-sync for L5 knowledge vaults.** When `OBSIDIAN_VAULT` env var is set, `/ultra-research` automatically exports its vault structure into the user's Obsidian vault with:
+  - Subfolder: `<vault>/<OBSIDIAN_RESEARCH_FOLDER>/<slug>/` (default `Research/<slug>/`)
+  - YAML frontmatter on every note (tags, query, date, slug, type)
+  - Obsidian wiki-links (`[[01-main-report]]`) in the auto-generated `00-index.md`
+  - Tag taxonomy: `#research #deep-research #L5 #<doc-type>`
+  - All L5 artifacts copied: executive summary, main report, glossary, timeline, playbooks, counter-arguments, open questions, bibliography, methodology, recommended reading
+- **Helper script:** `scripts/lib/obsidian-export.sh` — ~180 lines, one exported function `export_l5_to_obsidian()`, also runnable standalone as CLI (`bash ... <slug>`). Deployed to `~/.claude/scripts/lib/` by `install.sh`.
+- **`DEEP_RESEARCH_DISABLE_OBSIDIAN=1`** env var for users who want to explicitly opt out.
+- **New docs:** `docs/OBSIDIAN_INTEGRATION.md` — full setup, configuration, vault structure, disable options.
+- **`install.sh`** prints a tip about `OBSIDIAN_VAULT` when the env var isn't set — helps discovery.
+
+### Fault-tolerance
+
+- Skill checks helper availability → if missing, skip silently
+- If `OBSIDIAN_VAULT` unset → skip with `SKIPPED` status (not an error)
+- If `OBSIDIAN_VAULT` invalid path → error with explanation, skill continues (L5 doesn't block on export failure)
+- Retroactive import: `bash scripts/lib/obsidian-export.sh <slug>` imports any past L5 run
+
+### Roadmap changes
+
+- Removed MCP-based Codex integration and Streaming Codex output from v0.7 plan (see "Unreleased" section rationale above)
+
+---
 
 ---
 

@@ -95,6 +95,13 @@ if [ -d "$SCRIPT_DIR/lib" ]; then
     echo ""
 fi
 
+# --- Obsidian export hint ---
+if [ -z "${OBSIDIAN_VAULT:-}" ]; then
+    echo -e "${C_YELLOW}Tip:${C_RESET} set ${C_BOLD}OBSIDIAN_VAULT${C_RESET} to auto-export L5 knowledge vaults to Obsidian."
+    echo "     See docs/OBSIDIAN_INTEGRATION.md"
+    echo ""
+fi
+
 # --- post-install check ---
 echo "Verifying..."
 all_ok=true
