@@ -59,7 +59,10 @@ skills/osint-research/
 │   └── graph.mmd.tpl           # mermaid graph template
 └── lib/
     ├── entity-classifier.sh    # detects domain/email/IP/person/company/github
-    └── findings-extractor.sh   # parses channel outputs into findings with priorities
+    ├── findings-extractor.sh   # parses channel outputs into findings with priorities
+    ├── inbound-filter.sh       # drops results from blocklisted domains (§13.3.2)
+    ├── secret-redactor.sh      # truncates regex-matched secrets in any ingested text (§13.4)
+    └── secret-patterns.txt     # regex set for known secret types (AWS, GitHub PAT, JWT, etc.)
 ```
 
 ### 3.2 Artifacts directory layout
@@ -99,15 +102,17 @@ skills/osint-research/
 1. Classify entity type
     ↓
 2. Phase 1 — parallel independent channel recon
-    ↓
+    ↓  (every result passes through inbound-filter + secret-redactor)
 3. Phase 2 — channels that depend on Phase 1 outputs
-    ↓
+    ↓  (URLs to scrape pre-checked against blocklist; results filtered + redacted)
 4. Findings extraction (assign priorities)
     ↓
 5. Cross-reference and dedup
     ↓
-6. Synthesize report and artifacts
+6. Synthesize report and artifacts (already redacted by this point)
 ```
+
+**Important:** the `inbound-filter` + `secret-redactor` step is **mandatory** between every channel's raw output and any further processing. Claude never sees raw channel output directly — it sees the filtered, redacted version. This ensures unintended exposure paths are closed at the data plane, not relying on Claude's discretion.
 
 ### 4.2 Entity classification
 
@@ -223,7 +228,7 @@ Priorities surface at the top of `osint-report.md`.
 
 ### 5.2 Format invariants
 
-1. **Disclaimer is non-removable** — injected by skill into every report, top of file. Includes the §13.6 line about secret handling.
+1. **Disclaimer is non-removable** — injected by skill into every report, top of file. Includes the §13.7 line about secret handling.
 2. **Findings come first** — the highest-value content is above the fold.
 3. **Cross-references** — every Findings line links to its detail anchor in the Dossier; every Dossier item links back to its Findings entry if any.
 4. **Audit trail completeness** — every factual claim in the report traces to at least one channel call with timestamp. No claim without a source.
@@ -431,9 +436,10 @@ These caveats are documented in `OSINT_INTEGRATION.md` so users have correct exp
 
 | Risk | Mitigation |
 |---|---|
-| OSINT skill gets used for doxxing / harassment | Non-removable disclaimer in every report; README explicitly states "use at your own risk"; permissive scope is documented as a deliberate choice with user assuming responsibility; PII aggregation rules in §13.4 prevent the worst patterns (no joining of name+email+address into profiles) |
-| Skill artifacts contain plaintext secrets and become a leak vector | Hard redaction policy (§13) enforced at helper level, not by convention. Tests in `tests/security/` verify no plaintext secret ever lands in any artifact. |
-| Dorks abuse breach-leak dump sites and pull stolen data into local files | Hardcoded blocklist (§13.3) at helper level, cannot be disabled by user. Verified by `tests/security/test_dorks_blocklist.sh`. |
+| OSINT skill gets used for doxxing / harassment | Non-removable disclaimer in every report; README explicitly states "use at your own risk"; permissive scope is documented as a deliberate choice with user assuming responsibility; PII aggregation rules in §13.5 prevent the worst patterns (no joining of name+email+address into profiles) |
+| Skill artifacts contain plaintext secrets and become a leak vector | Two-stage protection: hard redaction policy (§13.2) for known secret patterns + inline redactor on all ingested text (§13.4). Enforced at helper level, not by convention. Tests in `tests/security/` verify no plaintext secret ever lands in any artifact. |
+| Dorks query a blocklisted dump site directly | Outbound blocklist (§13.3.1) at helper level rejects the query before any API call. Verified by `tests/security/test_dorks_outbound_blocklist.sh`. |
+| Tavily/Firecrawl/Exa/Perplexity return results that **link to** blocklisted dump sites without us querying them directly | Inbound filter (§13.3.2) drops any result whose URL or content references a blocklisted host, before that data ever reaches an artifact. Filtering events logged to `sources.md`. Verified by `tests/security/test_inbound_filter.sh` and `tests/security/test_phase2_scrape_safety.sh`. |
 | Channel APIs change format and break parsers | Each channel has its own bash helper isolated; failure of one channel does not break others (graceful degradation by design) |
 | Paid CLI tools not installed → poor results | Channel status block shows what ran and what didn't; install tips included in report; base functionality works without optional CLI |
 | Mermaid graph unreadable for large entities | Graph capped at top-N nodes by connectivity; full data always available in CSV artifacts |
@@ -452,8 +458,8 @@ This spec is complete when implementation can begin without further design quest
 3. Entity classifier correctly identifies all 6 types from §4.2.
 4. Findings extractor assigns priorities according to §4.5 rules.
 5. Report includes channel status block per §7.3.
-6. **No artifact in `.firecrawl/osint/<slug>/` contains plaintext secrets** — verified by §13 redaction tests (`tests/security/test_no_plaintext_secrets.sh`).
-7. **Dorks blocklist is enforced** — Tavily/Firecrawl queries against blocklisted domains (§13.3) are rejected at helper level, verified by `tests/security/test_dorks_blocklist.sh`.
+6. **No artifact in `.firecrawl/osint/<slug>/` contains plaintext secrets** — verified by §13 redaction tests (`tests/security/test_no_plaintext_secrets.sh`), covering ingestion from all channels (GitHub, Wayback, Firecrawl, Tavily, Perplexity, etc.).
+7. **Two-level domain blocklist is enforced** — outbound (`test_dorks_outbound_blocklist.sh`) and inbound (`test_inbound_filter.sh`, `test_phase2_scrape_safety.sh`) tests pass; no blocklisted URL or scraped content lands in any artifact.
 8. `install.sh` deploys OSINT helpers and prints CLI install tips for missing optional tools.
 9. `docs/OSINT_INTEGRATION.md` exists and covers what's described in §9.3, including §13 Security & Privacy section.
 10. `README.md` lists `/osint-research` in a "Specialized skills" section, distinct from L0–L5 ladder.
@@ -485,23 +491,58 @@ When a channel surfaces what looks like a secret (regex-detected patterns: API k
 
 The first-4 / last-4 pattern is the **same** convention used by GitHub Secret Scanning UI and is sufficient for the user to verify which secret was found without the artifact itself becoming a leak.
 
-### 13.3 Dorks blocklist
+### 13.3 Two-level domain blocklist
 
-The general dorks helper (`channels/dorks.sh`) **must** reject queries containing any of the following domains as `site:` operators (case-insensitive). The list is enforced at helper level — not just by Claude convention — so misuse is impossible:
+A query-only blocklist is **insufficient** — even a generic dork like `"example-corp.com" credentials leak` may return results that link to pastebin / dehashed / breachforums. Without an inbound filter, those URLs and their scraped content would land in artifacts and re-create the exact problem the blocklist exists to prevent.
+
+The skill therefore enforces the blocklist at **two levels**:
+
+#### 13.3.1 Outbound (query-level)
+
+`channels/dorks.sh` rejects any query that uses a blocklisted domain as a `site:` / `inurl:` / `intext:` operator (case-insensitive, regex-based check). Rejection returns non-zero exit and is logged; no API call is made.
+
+#### 13.3.2 Inbound (result-level)
+
+**Every** result from **every** channel passes through `lib/inbound-filter.sh` before any data is written to disk. The filter:
+
+1. Drops any result URL whose host (or any path segment) matches a blocklisted domain.
+2. Drops any result whose scraped content body contains a blocklisted host (full-string regex on extracted text).
+3. Increments a counter `filtered: <N>` shown in the channel status block, so the user sees what was suppressed.
+4. Logs filtered URLs (host only, no path) to `.firecrawl/osint/<slug>/sources.md` under a `Filtered (security policy)` heading — so the audit trail records that filtering happened, but does not record content.
+
+This applies to: Tavily search results, Firecrawl scrape inputs and outputs, Exa neural search, Perplexity citations, GitHub code search results, Wayback snapshot links, theHarvester URLs, dorks raw results.
+
+#### 13.3.3 Blocklist contents
+
+Default hardcoded list (case-insensitive, applies to both outbound and inbound):
 
 ```
-pastebin.com, paste.ee, ghostbin.com, hastebin.com,
-breached.cc, breachforums.is, raidforums.com, cracked.io,
-dehashed.com, leakcheck.io, intelx.io,
+pastebin.com, paste.ee, ghostbin.com, hastebin.com, justpaste.it, paste.org, ix.io,
+breached.cc, breachforums.is, breachforums.st, raidforums.com, cracked.io,
+dehashed.com, leakcheck.io, intelx.io, leak-lookup.com,
 doxbin.com, doxbin.org, doxbin.net,
-ddosecrets.com, distributeddenialofsecrets.com
+ddosecrets.com, distributeddenialofsecrets.com,
+nulled.to, leakix.net, snusbase.com, weleakinfo.to
 ```
 
-Reason: copying content from these domains into local artifacts (or even fetching it through paid Tavily credits) constitutes redistribution of stolen / leaked PII. Even for personal use this is risky in most jurisdictions and ethically incompatible with the stated "Permissive" scope (which means "any legitimate public data", not "any data that ended up online").
+The user can extend the blocklist via env var `OSINT_EXTRA_BLOCKLIST` (comma-separated). The user **cannot** disable or shrink the default list — it is hardcoded into `lib/inbound-filter.sh`.
 
-The user can extend the blocklist via env var `OSINT_EXTRA_BLOCKLIST` (comma-separated). The user **cannot** disable the default blocklist — it is hardcoded.
+### 13.4 Inline secret redaction on ingestion
 
-### 13.4 PII handling
+Beyond the URL blocklist, every text body the skill ingests (Wayback snapshots, Firecrawl scrapes, GitHub code, Tavily content, Perplexity answers) is run through `lib/secret-redactor.sh` before being processed by Claude or written to artifacts. The redactor uses well-known regex patterns:
+
+- AWS access keys (`AKIA[0-9A-Z]{16}`, `ASIA…`, etc.)
+- GitHub PATs (`ghp_…`, `gho_…`, `ghu_…`, `ghs_…`, `ghr_…`)
+- Generic high-entropy tokens following common prefixes (`Bearer …`, `Authorization: …`)
+- Private keys (`-----BEGIN [A-Z ]*PRIVATE KEY-----`)
+- JWTs (`eyJ[A-Za-z0-9_=-]{10,}\.[A-Za-z0-9_=-]{10,}\.[A-Za-z0-9_.+/=-]+`)
+- Slack tokens, Stripe keys, Twilio SIDs, etc. (full list maintained in `lib/secret-patterns.txt`, sourced from public TruffleHog/Gitleaks rule sets)
+
+When a match is found, the literal value is replaced with the truncated form (first-4 + `…` + last-4). The original is **never** kept in any intermediate file or in the conversation context.
+
+This protects against leaked secrets that arrive through unexpected paths (a Wayback snapshot of an old admin panel; a Firecrawl scrape that included an embedded API key in the page; a GitHub README that copy-pasted a real key).
+
+### 13.5 PII handling
 
 Public personal data (names, public email addresses, public LinkedIn profiles) is **in scope** under the Permissive ethical decision (§2 row 6).
 
@@ -512,13 +553,15 @@ But the skill must NOT:
 
 These constraints apply even though the ethical scope is Permissive. "Permissive" means the user takes responsibility for use, not that the skill produces maximum-exposure artifacts.
 
-### 13.5 Verification (tests)
+### 13.6 Verification (tests)
 
-- `tests/security/test_no_plaintext_secrets.sh` — runs the skill against fixtures known to contain regex-matchable secrets, then greps every artifact for plaintext patterns. Test fails if any plaintext secret appears in any output file.
-- `tests/security/test_dorks_blocklist.sh` — calls `dorks.sh` with each blocklisted domain as `site:` operator, asserts non-zero exit and no API call made.
-- `tests/security/test_redaction_format.sh` — verifies redacted secrets follow the first-4 / last-4 convention exactly.
+- `tests/security/test_no_plaintext_secrets.sh` — runs the skill against fixtures known to contain regex-matchable secrets in **any** ingestion path (GitHub commit, Wayback snapshot, Firecrawl scrape, Tavily content, Perplexity citation), then greps every artifact for plaintext patterns. Test fails if any plaintext secret appears in any output file.
+- `tests/security/test_dorks_outbound_blocklist.sh` — calls `dorks.sh` with each blocklisted domain as `site:` / `inurl:` / `intext:` operator, asserts non-zero exit and no API call made.
+- `tests/security/test_inbound_filter.sh` — feeds `lib/inbound-filter.sh` fixtures with: blocklisted domain in URL host, blocklisted domain in URL path, blocklisted domain mentioned in scraped content body. Asserts each is dropped, counter incremented, and `sources.md` records the filter event without content.
+- `tests/security/test_redaction_format.sh` — verifies redacted secrets follow the first-4 / last-4 convention exactly across all secret types in `secret-patterns.txt`.
+- `tests/security/test_phase2_scrape_safety.sh` — simulates Phase 2 picking a top-URL that resolves to a blocklisted domain → asserts Firecrawl call is **not** made and the URL is logged as filtered.
 
-### 13.6 Disclaimer expansion
+### 13.7 Disclaimer expansion
 
 The non-removable disclaimer (§5.2 invariant 1) must include a line about secret handling:
 
