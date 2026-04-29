@@ -289,4 +289,27 @@ assert_eq "$got" "" "subdomain mention in content body blocked"
 got=$(printf '%s' '{"url":"https://safe.com/?ref=pastebin.com.au","content":"y"}' | bash "$FILTER" 2>/dev/null)
 assert_contains "$got" "pastebin.com.au" "embedded sibling-TLD (pastebin.com.au) NOT blocked"
 
+# --- Fix #14 — trailing-dot FQDN form is matched ---
+# pastebin.com. with the FQDN-root dot is the same target as pastebin.com.
+# The regex consumes an optional trailing dot (\.?) so the right-boundary
+# lookahead checks the char AFTER the dot, distinguishing FQDN-root form
+# from sibling-TLD continuation.
+
+got=$(printf '%s' '{"url":"https://safe.com/?u=https://archive.pastebin.com./leak","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded subdomain with trailing-dot FQDN blocked"
+
+got=$(printf '%s' '{"url":"https://safe.com/?u=https://pastebin.com./x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded host with trailing-dot FQDN blocked"
+
+got=$(printf '%s' '{"url":"https://safe.com/?to=pastebin.com.","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "trailing-dot FQDN at end-of-URL blocked"
+
+# Trailing-dot FQDN in content body
+got=$(printf '%s' '{"url":"https://safe.com/x","content":"see archive.pastebin.com. for details"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "trailing-dot FQDN in content body blocked"
+
+# Asymmetry preservation: pastebin.com.au has dot-then-host (au), still NOT blocked
+got=$(printf '%s' '{"url":"https://safe.com/?u=https://pastebin.com.au/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "pastebin.com.au" "embedded pastebin.com.au still NOT blocked (sibling TLD)"
+
 assert_summary

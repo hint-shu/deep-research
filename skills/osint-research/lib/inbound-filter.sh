@@ -53,25 +53,24 @@ if not host_alt:
 host_re = re.compile(r"(?:^|\.)(?:" + host_alt + r")$", re.IGNORECASE)
 
 # Token boundary for matching blocklisted hosts inside content text and
-# inside URL strings. Asymmetric: leading dot IS allowed (so subdomain
-# matches like archive.pastebin.com fire on the .pastebin.com suffix),
-# trailing dot is NOT allowed (so sibling domains like pastebin.com.au
-# do not match the pastebin.com prefix).
+# inside URL strings. Asymmetric, with an optional trailing FQDN-root dot:
 #
-#   LEFT  exclusion: [a-zA-Z0-9_-]   (no .)
-#   RIGHT exclusion: [a-zA-Z0-9._-]
+#   LEFT  exclusion: [a-zA-Z0-9_-]   — . NOT excluded so .pastebin.com
+#                                      (subdomain prefix) matches
+#   match:  host_alt                 — e.g. pastebin\.com
+#   tail:   \.?                      — optional FQDN-root dot
+#   RIGHT exclusion: [a-zA-Z0-9._-]  — must be followed by non-host non-dot
 #
-# Differs from \b (\w includes _ and excludes .) which has both
-# false-positive (pastebin.com.au) and false-negative (_pastebin.com_)
-# bugs. With the asymmetric class:
-#   * archive.pastebin.com  — preceded by ., followed by EOS/non-host → match (subdomain)
-#   * pastebin.com.au       — followed by . → no match (different domain)
-#   * _pastebin.com_evil    — preceded by _ → no match (different host)
-#   * Xpastebin.com         — preceded by X (alnum) → no match
-#   * pastebin.commodity    — followed by m → no match
+# Distinguishes:
+#   * archive.pastebin.com    — preceded by ., trailing EOS → match (subdomain)
+#   * archive.pastebin.com./  — trailing . consumed, then / breaks → match (FQDN form)
+#   * pastebin.com.au         — trailing . is followed by 'a' (host) → no match
+#   * _pastebin.com_evil      — preceded by _ → no match (different host)
+#   * Xpastebin.com           — preceded by X (alnum) → no match
+#   * pastebin.commodity      — followed by 'm' (host) → no match
 #   * https://x?u=pastebin.com — preceded by =, followed by EOS → match
 HOSTNAME_TOKEN_RE = re.compile(
-    r"(?<![a-zA-Z0-9_-])(?:" + host_alt + r")(?![a-zA-Z0-9._-])",
+    r"(?<![a-zA-Z0-9_-])(?:" + host_alt + r")\.?(?![a-zA-Z0-9._-])",
     re.IGNORECASE,
 )
 content_re = HOSTNAME_TOKEN_RE
