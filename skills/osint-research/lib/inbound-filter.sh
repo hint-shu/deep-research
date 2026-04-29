@@ -40,7 +40,7 @@ _py_tmp=$(mktemp)
 trap 'rm -f "$_py_tmp"' EXIT
 cat > "$_py_tmp" <<'PY'
 import os, re, sys, json
-from urllib.parse import urlparse
+from urllib.parse import urlparse, unquote
 
 host_alt = os.environ.get("HOST_ALT", "")
 if not host_alt:
@@ -54,18 +54,33 @@ host_re = re.compile(r"(?:^|\.)(?:" + host_alt + r")$", re.IGNORECASE)
 content_re = re.compile(r"\b(?:" + host_alt + r")\b", re.IGNORECASE)
 
 
+# RFC 3986 sub-delims — preserved by urlparse inside regname per spec, but
+# never valid in an actual DNS label, so we treat them as host terminators.
+# (Underscore is RFC-unreserved, not a sub-delim — it must NOT be trimmed.
+# A hostname containing _ is a different DNS name, not pastebin.com.)
+SUBDELIM_RE = re.compile(r"[!$&'()*+,;=]")
+# Anything that should not appear inside a hostname — defensive trim after
+# percent-decoding in case an attacker hid a separator behind %XX encoding.
+HOST_TERM_RE = re.compile(r"[/?#\s\\]")
+
+
 def extract_host(url):
-    """Return canonical lowercased hostname or '' if none.
+    """Return canonical lowercased hostname suitable for blocklist match.
 
-    urlparse handles port-stripping, userinfo, IPv6 brackets, capitalised
-    scheme. We additionally strip the optional trailing dot (FQDN root)
-    so blocklisted-host suffix matching works against pastebin.com. as
-    well as pastebin.com.
+    urlparse handles port-stripping, userinfo, IPv6 brackets, scheme
+    normalisation. Works for any scheme with an authority component
+    (http, https, ftp, gopher, ws, wss, etc.). Schemes without authority
+    (mailto, javascript, data, file) yield no hostname and we return ''
+    — those URLs never trigger a network query.
 
-    Note: urlparse preserves RFC 3986 sub-delims (;,=+!$*()) inside the
-    regname per spec. The host_re anchored match relies on the hostname
-    being clean LDH chars only; any sub-delim breaks the $ anchor. The
-    full-URL substring fallback below catches those cases.
+    Additional canonicalisation:
+    - percent-decode (resolvers do this before DNS lookup, so
+      pastebin%2Ecom is the same target as pastebin.com)
+    - trim at first /?#whitespace\\ (in case decoded value snuck a separator
+      back in)
+    - strip trailing dot (FQDN root form)
+    - trim at first sub-delim (RFC-allowed in regname but not in DNS labels;
+      typical resolvers stop here)
     """
     if not isinstance(url, str) or not url:
         return ""
@@ -73,11 +88,16 @@ def extract_host(url):
         parsed = urlparse(url)
     except Exception:
         return ""
-    if parsed.scheme.lower() not in ("http", "https"):
-        return ""
-    host = (parsed.hostname or "").lower()
+    host = parsed.hostname or ""
+    try:
+        host = unquote(host)
+    except Exception:
+        pass
+    host = host.lower()
+    host = HOST_TERM_RE.split(host, 1)[0]
     if host.endswith("."):
         host = host[:-1]
+    host = SUBDELIM_RE.split(host, 1)[0]
     return host
 
 
@@ -99,21 +119,19 @@ for raw in sys.stdin:
 
     blocked = False
 
-    # Primary check: clean hostname extracted by urlparse, matched against
-    # the suffix-anchored host_re (catches example.com and *.example.com).
+    # URL host check: extract_host returns the canonical LDH hostname so
+    # that pastebin.com;junk, pastebin.com:443, pastebin.com#frag, etc all
+    # collapse to pastebin.com before the suffix-anchored host_re fires.
+    # Subdomain match (foo.pastebin.com) handled via (?:^|\.) anchor.
     host = extract_host(url)
     if host and host_re.search(host):
         blocked = True
 
-    # Defense-in-depth: scan the full URL text for blocklisted host as a
-    # word-bounded substring. Catches messy hostnames urlparse preserves
-    # but where the $-anchor in host_re fails — e.g. pastebin.com;params,
-    # pastebin.com,foo — and non-http schemes (ftp://, gopher://) that
-    # extract_host filters out.
-    if not blocked and isinstance(url, str) and content_re.search(url):
-        blocked = True
-
-    # Content body scan for any blocklisted host reference.
+    # Content body scan. \b word-boundary anchors are deliberate: we want
+    # pastebin.com to match in scraped text but not in pastebin.community.
+    # Note \b uses Python's \w which includes underscore, so a content
+    # snippet "_pastebin.com_" would not match — acceptable since that
+    # token isn't actually a hostname reference.
     if not blocked and isinstance(content, str) and content_re.search(content):
         blocked = True
 

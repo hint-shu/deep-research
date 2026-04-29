@@ -180,4 +180,52 @@ assert_eq "$got" "" "gopher:// scheme with blocklisted host blocked"
 got=$(printf '%s' '{"url":"https://pastebin.commodity.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
 assert_contains "$got" "pastebin.commodity.com" "substring without \\b boundary is NOT blocked"
 
+# --- Fix #10 — underscore-boundary bypasses + sibling-domain over-block ---
+# After switching to extract_host (urlparse + LDH-prefix trim) for the URL
+# check and dropping the full-URL substring fallback, two boundary bugs
+# are gone:
+#   1. \b in Python regex doesn't fire between word chars and underscore,
+#      so a URL fallback scan would miss _pastebin.com / pastebin.com_evil.
+#      The new path doesn't scan URL substrings — it parses the actual
+#      hostname, which is _pastebin.com (different real host, not blocked).
+#   2. The fallback over-blocked pastebin.com.au — a real Australian
+#      domain — because \bpastebin\.com\b matched the substring. The new
+#      path extracts hostname pastebin.com.au and host_re's $-anchor
+#      correctly rejects it (suffix is .au not pastebin.com).
+
+# Underscore-prefixed: actually different host, not pastebin.com — pass through
+got=$(printf '%s' '{"url":"https://_pastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "_pastebin.com" "underscore-prefixed host is NOT pastebin.com (passes)"
+
+# Underscore-suffixed: different host (DNS-allowed) — pass through
+got=$(printf '%s' '{"url":"https://x.pastebin.com_y/path","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "pastebin.com_y" "underscore-suffixed host is NOT pastebin.com subdomain (passes)"
+
+# Sibling domain pastebin.com.au is not a subdomain of pastebin.com — pass through
+got=$(printf '%s' '{"url":"https://www.pastebin.com.au/blog","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "pastebin.com.au" "pastebin.com.au is NOT a subdomain of pastebin.com (passes)"
+
+# Different TLD entirely — pass through
+got=$(printf '%s' '{"url":"https://pastebin.community/blog","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "pastebin.community" "pastebin.community is a different domain (passes)"
+
+# --- WS/WSS — websocket schemes with blocklisted host should still block ---
+got=$(printf '%s' '{"url":"wss://pastebin.com/socket","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "wss:// scheme with blocklisted host blocked"
+
+# --- Fix #11 — percent-encoded hostname must not bypass ---
+# Most HTTP clients percent-decode the hostname before DNS lookup, so
+# pastebin%2Ecom is the same target as pastebin.com. urlparse keeps the
+# raw %-encoded form, so we explicitly unquote() before matching.
+got=$(printf '%s' '{"url":"https://pastebin%2Ecom/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "percent-encoded dot in host (%2E) blocked"
+
+# Percent-encoded slash hiding the host/path boundary
+got=$(printf '%s' '{"url":"https://pastebin%2Ecom%2Fpath","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "percent-encoded slash after host blocked"
+
+# Percent-encoded sub-delim trying to push real hostname out of $ anchor
+got=$(printf '%s' '{"url":"https://pastebin.com%3Bjunk/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "percent-encoded sub-delim (%3B) trimmed and blocked"
+
 assert_summary
