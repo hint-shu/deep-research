@@ -45,8 +45,8 @@ assert_contains "$got_stderr" "filtered=1" "userinfo URL filter count"
 # --- Fix #3 — escaped JSON quote in content does NOT hide blocklisted host ---
 # Naive [^"]* extraction stops at the first " (including JSON-escaped \").
 # An attacker controlling scraped content could prepend \"X to push a
-# blocklisted reference past the truncation point. The fix uses
-# (?:[^"\\]|\\.)* to capture the full JSON string body.
+# blocklisted reference past the truncation point. The fix uses proper
+# JSON parsing to capture the full JSON string body.
 input_escaped='{"url":"https://safe.com/x","content":"prefix \"injected\" then dehashed.com link"}'
 got_stdout=$(printf '%s' "$input_escaped" | bash "$FILTER" 2>/tmp/inbound-filter-err4)
 got_stderr=$(cat /tmp/inbound-filter-err4)
@@ -61,5 +61,42 @@ got_stdout=$(printf '%s' "$input_url_esc" | bash "$FILTER" 2>/tmp/inbound-filter
 got_stderr=$(cat /tmp/inbound-filter-err5)
 rm -f /tmp/inbound-filter-err5
 assert_eq "$got_stdout" "" "url with escaped quote — host still extracted and blocked"
+
+# --- Fix #4 — JSON-escaped slashes in URL (\/) do NOT hide blocklisted host ---
+# JSON allows \/ as a valid escape for /. The naive perl ^https?:// regex
+# fails on https:\/\/pastebin.com\/x, leaving host empty and the URL
+# block check skipped. Proper JSON parsing decodes \/ before host
+# extraction.
+input_slash='{"url":"https:\/\/pastebin.com\/x","content":"y"}'
+got_stdout=$(printf '%s' "$input_slash" | bash "$FILTER" 2>/tmp/inbound-filter-err6)
+got_stderr=$(cat /tmp/inbound-filter-err6)
+rm -f /tmp/inbound-filter-err6
+assert_eq "$got_stdout" "" "url with escaped slashes — host still extracted and blocked"
+assert_contains "$got_stderr" "filtered=1" "escaped-slash bypass filter count"
+
+# --- Fix #5 — JSON unicode escape (\u00XX) in content does NOT hide hostname ---
+# pastebin.com is the JSON encoding of pastebin.com. Proper JSON parse
+# decodes it before regex matching.
+input_unicode='{"url":"https://safe.com/x","content":"see pastebin.com for leak"}'
+got_stdout=$(printf '%s' "$input_unicode" | bash "$FILTER" 2>/tmp/inbound-filter-err7)
+got_stderr=$(cat /tmp/inbound-filter-err7)
+rm -f /tmp/inbound-filter-err7
+assert_eq "$got_stdout" "" "content with \u escape — hostname still detected"
+assert_contains "$got_stderr" "filtered=1" "unicode-escape bypass filter count"
+
+# --- Fix #6 — same defense in url field via unicode escape ---
+input_url_uni='{"url":"https://pastebin.com/x","content":"y"}'
+got_stdout=$(printf '%s' "$input_url_uni" | bash "$FILTER" 2>/tmp/inbound-filter-err8)
+got_stderr=$(cat /tmp/inbound-filter-err8)
+rm -f /tmp/inbound-filter-err8
+assert_eq "$got_stdout" "" "url with \u escape in host — still blocked"
+
+# --- Malformed JSON is dropped (not passed through uninspectable) ---
+input_bad='not valid json at all'
+got_stdout=$(printf '%s' "$input_bad" | bash "$FILTER" 2>/tmp/inbound-filter-err9)
+got_stderr=$(cat /tmp/inbound-filter-err9)
+rm -f /tmp/inbound-filter-err9
+assert_eq "$got_stdout" "" "malformed JSON line is dropped (cannot inspect)"
+assert_contains "$got_stderr" "filtered=1" "malformed JSON counted as filtered"
 
 assert_summary

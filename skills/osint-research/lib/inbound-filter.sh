@@ -21,44 +21,71 @@ BLOCKLIST="$DEFAULT_BLOCKLIST $EXTRA"
 
 # Build a single anchored regex: (?:^|\.)(host1|host2|...)$ against URL host,
 # and a content regex matching any blocklisted host as a substring.
+# Tokens are validated to be hostname-shaped before inclusion so they cannot
+# inject regex metachars or shell metachars.
 host_alt=""
 for h in $BLOCKLIST; do
     [ -z "$h" ] && continue
-    # Reject tokens with regex metacharacters or shell weirdness — only allow
-    # hostname-shaped strings (alnum, dot, hyphen).
     [[ "$h" =~ ^[a-zA-Z0-9.-]+$ ]] || continue
     esc=$(printf '%s' "$h" | sed 's/\./\\./g')
     host_alt="${host_alt}|${esc}"
 done
 host_alt="${host_alt#|}"
 
-filtered=0
-while IFS= read -r line || [ -n "$line" ]; do
-    [ -z "$line" ] && continue
+# Per-line processing in python so JSON-escapes (\/, \", \\, \uXXXX) decode
+# correctly before the blocklist regex runs. Earlier pure-perl regex extraction
+# was bypassed by valid JSON encodings of the URL (escaped slashes) and content
+# (escaped quotes / unicode escapes), letting blocklisted hosts through.
+_py_tmp=$(mktemp)
+trap 'rm -f "$_py_tmp"' EXIT
+cat > "$_py_tmp" <<'PY'
+import os, re, sys, json
 
-    # JSON string capture: account for backslash-escaped chars (e.g. \" \\ \/).
-    # Naive [^"]* stops at the first " — including ones the JSON producer
-    # escaped — so an attacker placing \" before a blocklisted host inside
-    # content would slip past the substring scan. (?:[^"\\]|\\.)* matches
-    # either a non-quote/non-backslash char OR any backslash-escape pair.
-    url=$(printf '%s' "$line" | perl -ne 'print $1 if /"url"\s*:\s*"((?:[^"\\]|\\.)*)"/')
-    content=$(printf '%s' "$line" | perl -ne 'print $1 if /"content"\s*:\s*"((?:[^"\\]|\\.)*)"/')
+host_alt = os.environ.get("HOST_ALT", "")
+if not host_alt:
+    # No tokens — pass through unchanged but still report the count.
+    for line in sys.stdin:
+        sys.stdout.write(line)
+    print("filtered=0", file=sys.stderr)
+    sys.exit(0)
 
-    host=$(printf '%s' "$url" | perl -ne 'if (m{^https?://([^/]+)}) { my $h = $1; $h =~ s/^[^@]*@//; print $h }')
+host_re = re.compile(r"(?:^|\.)(?:" + host_alt + r")$", re.IGNORECASE)
+content_re = re.compile(r"\b(?:" + host_alt + r")\b", re.IGNORECASE)
+url_host_re = re.compile(r"^https?://(?:[^/@]*@)?([^/]+)", re.IGNORECASE)
 
-    block=0
-    if [ -n "$host" ] && printf '%s' "$host" | perl -ne "exit 0 if /(?:^|\\.)($host_alt)$/i; exit 1"; then
-        block=1
-    fi
-    if [ "$block" -eq 0 ] && [ -n "$content" ] && printf '%s' "$content" | perl -ne "exit 0 if /\\b($host_alt)\\b/i; exit 1"; then
-        block=1
-    fi
+filtered = 0
+for raw in sys.stdin:
+    line = raw.rstrip("\n")
+    if not line:
+        continue
+    try:
+        rec = json.loads(line)
+    except Exception:
+        # Malformed JSON: drop silently to be safe (don't pass through
+        # something whose contents we can't inspect).
+        filtered += 1
+        continue
 
-    if [ "$block" -eq 1 ]; then
-        filtered=$((filtered + 1))
-    else
-        printf '%s\n' "$line"
-    fi
-done
+    url = rec.get("url", "") or ""
+    content = rec.get("content", "") or ""
 
-printf 'filtered=%d\n' "$filtered" >&2
+    blocked = False
+
+    if isinstance(url, str):
+        m = url_host_re.match(url)
+        if m and host_re.search(m.group(1)):
+            blocked = True
+
+    if not blocked and isinstance(content, str) and content_re.search(content):
+        blocked = True
+
+    if blocked:
+        filtered += 1
+    else:
+        # Re-emit the original line verbatim so downstream sees identical bytes.
+        sys.stdout.write(line + "\n")
+
+print(f"filtered={filtered}", file=sys.stderr)
+PY
+
+HOST_ALT="$host_alt" python3 "$_py_tmp"
