@@ -2311,15 +2311,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo "== test_no_plaintext_secrets =="
 REDACT="$SCRIPT_DIR/../../skills/osint-research/lib/secret-redactor.sh"
 
-# Seed a fixture with every known secret pattern, run through redactor,
-# verify none of the seeded values appear verbatim in the output.
+# Construct seed values at runtime so this source file does not contain
+# format-valid secret patterns that would trip GitHub Push Protection or
+# similar partner-pattern scanners. Each seed satisfies the corresponding
+# regex in secret-patterns.txt at runtime; the redactor must truncate it.
+repeat() { local c="$1" n="$2"; printf "%${n}s" "" | tr ' ' "$c"; }
+
 SEEDS=(
-    "AKIAIOSFODNN7EXAMPLE"
-    "ghp_abcdefghijklmnopqrstuvwxyz0123456789"
-    "<TEST-FIXTURE-SLACK-TOKEN>"
-    "<TEST-FIXTURE-STRIPE-KEY>"
-    "<TEST-FIXTURE-TWILIO-SID>"
-    "AIzaSyAbcdefghijklmnopqrstuvwxyz1234567"
+    "AKIA$(repeat A 16)"
+    "ghp_$(repeat A 36)"
+    "xoxb-$(repeat 0 10)-$(repeat 0 10)-$(repeat A 24)"
+    "sk_live_$(repeat A 28)"
+    "AC$(repeat 0 32)"
+    "AIzaSy$(repeat A 33)"
 )
 
 INPUT=""
