@@ -41,13 +41,13 @@ sub _truncate {
 
 # Pass patterns via stdin and the input via DATA section (joined with __DATA__).
 # Implementation: use a here-doc trick.
-{ cat "$PATTERNS_FILE"; printf '\n__SEP__\n'; printf '%s' "$input"; } | \
+{ cat "$PATTERNS_FILE"; printf '\n__OSINT_REDACTOR_BOUNDARY_8f3a2c1d_NEVER_IN_INPUT__\n'; printf '%s' "$input"; } | \
 perl -e '
 my %patterns;
 my $section = 0;
 my $text = "";
 while (<STDIN>) {
-    if (/^__SEP__$/) { $section = 1; next; }
+    if (/^__OSINT_REDACTOR_BOUNDARY_8f3a2c1d_NEVER_IN_INPUT__$/) { $section = 1; next; }
     if ($section == 0) {
         chomp;
         next if /^\s*#/ || /^\s*$/;
@@ -57,11 +57,16 @@ while (<STDIN>) {
         $text .= $_;
     }
 }
+my @errs;
 for my $label (keys %patterns) {
     my $re = $patterns{$label};
-    eval {
-        $text =~ s/($re)/_t($1, $label)/ge;
+    eval { $text =~ s/($re)/_t($1, $label)/ge; 1 } or do {
+        push @errs, "secret-redactor: bad pattern '"'"'$label'"'"': $@";
     };
+}
+if (@errs) {
+    print STDERR "$_\n" for @errs;
+    exit 2;
 }
 print $text;
 
