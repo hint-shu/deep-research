@@ -22,7 +22,7 @@ fi
 emit() {
     local rtype="$1" url="$2" content="$3" extra="${4:-}"
     # JSON-escape content
-    content_json=$(printf '%s' "$content" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read())[1:-1])' 2>/dev/null || printf '%s' "$content" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr '\n' ' ')
+    content_json=$(printf '%s' "$content" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read())[1:-1])' 2>/dev/null || printf '%s' "$content" | sed 's/\\/\\\\/g; s/"/\\"/g; s/	/\\t/g' | tr -d '\r' | tr '\n' ' ')
     if [ -n "$extra" ]; then
         printf '{"channel":"whois-dns","record_type":"%s","url":"%s","content":"%s","metadata":%s}\n' "$rtype" "$url" "$content_json" "$extra"
     else
@@ -34,7 +34,7 @@ case "$ENTITY_TYPE" in
     domain|company)
         if command -v whois >/dev/null; then
             whois_out=$(whois "$TARGET" 2>/dev/null || true)
-            emit "whois" "whois://$TARGET" "$whois_out"
+            [ -n "$whois_out" ] && emit "whois" "whois://$TARGET" "$whois_out"
         fi
         if command -v dig >/dev/null; then
             for rt in A AAAA NS MX TXT SOA; do
@@ -47,7 +47,8 @@ case "$ENTITY_TYPE" in
         ;;
     ip)
         if command -v whois >/dev/null; then
-            emit "whois" "whois://$TARGET" "$(whois "$TARGET" 2>/dev/null || true)"
+            whois_out=$(whois "$TARGET" 2>/dev/null || true)
+            [ -n "$whois_out" ] && emit "whois" "whois://$TARGET" "$whois_out"
         fi
         if command -v dig >/dev/null; then
             ptr=$(dig +short -x "$TARGET" 2>/dev/null || true)

@@ -23,4 +23,11 @@ assert_contains "$got" '"record_type"' "structured records"
 bash "$WD" --type domain --target "" >/dev/null 2>&1
 assert_exit_code 1 $? "empty target fails"
 
+# --- Fix #2 — no whois record when whois output is empty ---
+# Use a known-non-existent TLD to force whois to return empty.
+got=$(bash "$WD" --type domain --target nonexistent.invalidtld 2>/dev/null || true)
+# Either no whois record (preferred) or the channel emits dig records but no
+# empty-content whois record. Assert no record with empty content field for whois.
+assert_not_contains "$got" '"channel":"whois-dns","record_type":"whois","url":"whois://nonexistent.invalidtld","content":""' "no empty-whois record emitted"
+
 assert_summary
