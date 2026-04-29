@@ -228,4 +228,41 @@ assert_eq "$got" "" "percent-encoded slash after host blocked"
 got=$(printf '%s' '{"url":"https://pastebin.com%3Bjunk/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
 assert_eq "$got" "" "percent-encoded sub-delim (%3B) trimmed and blocked"
 
+# --- Fix #12 — embedded blocklisted URL in primary URL field is blocked ---
+# Even when the primary URL points to a benign host (safe.com), if the URL
+# contains an embedded blocklisted reference (in query, path, or after
+# percent-decode), the orchestrator following such embedded refs would
+# scrape the blocklisted target. Defense-in-depth: scan the unquote()-d
+# URL string for any blocklisted-host token using a strict boundary class.
+
+# Embedded full URL in query parameter
+got=$(printf '%s' '{"url":"https://safe.com/?u=https://pastebin.com/leak","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded https://pastebin.com in query is blocked"
+
+# Embedded host (no scheme) in query parameter
+got=$(printf '%s' '{"url":"https://safe.com/redirect?to=pastebin.com","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded host (no scheme) in query is blocked"
+
+# Percent-encoded embedded URL
+got=$(printf '%s' '{"url":"https://safe.com/?u=https%3A%2F%2Fpastebin.com%2Fx","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "percent-encoded embedded URL is blocked"
+
+# Comma-separated URL list with one blocklisted
+got=$(printf '%s' '{"url":"https://safe.com,https://pastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "comma-separated URL list with blocklisted is blocked"
+
+# Different blocklisted host embedded
+got=$(printf '%s' '{"url":"https://safe.com/path?domain=dehashed.com","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "embedded dehashed.com in query is blocked"
+
+# --- Negative — strict token boundary excludes alnum/./_/- around match ---
+# Xpastebin.comY has X before and Y after — both alnum (in set) → no match.
+# Correctly NOT blocked (it's not actually a hostname reference).
+got=$(printf '%s' '{"url":"https://safe.com/?u=Xpastebin.comY","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "Xpastebin.comY" "alnum-bracketed substring is NOT blocked"
+
+# Path segment that just happens to spell pastebin (no .com after)
+got=$(printf '%s' '{"url":"https://safe.com/api/pastebin","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "/api/pastebin" "path containing 'pastebin' (without .com) NOT blocked"
+
 assert_summary

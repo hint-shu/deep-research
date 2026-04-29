@@ -51,7 +51,22 @@ if not host_alt:
     sys.exit(0)
 
 host_re = re.compile(r"(?:^|\.)(?:" + host_alt + r")$", re.IGNORECASE)
-content_re = re.compile(r"\b(?:" + host_alt + r")\b", re.IGNORECASE)
+
+# Token boundary that excludes alphanumerics + RFC-unreserved hostname chars
+# (.,_,-). Used for both content body scanning and URL-string embedded-host
+# scanning. Differs from \b (which uses Python's \w that includes _ and
+# excludes .) so:
+#   * pastebin.com.au       — followed by . → no match (different domain)
+#   * _pastebin.com_evil    — surrounded by _ → no match (different host)
+#   * pastebin.commodity    — followed by m → no match (different host)
+#   * https://x?u=pastebin.com — preceded by =, followed by EOS → match
+#   * see pastebin.com here — preceded by space, followed by space → match
+HOSTNAME_TOKEN_RE = re.compile(
+    r"(?<![a-zA-Z0-9._-])(?:" + host_alt + r")(?![a-zA-Z0-9._-])",
+    re.IGNORECASE,
+)
+content_re = HOSTNAME_TOKEN_RE
+url_embedded_re = HOSTNAME_TOKEN_RE
 
 
 # RFC 3986 sub-delims — preserved by urlparse inside regname per spec, but
@@ -119,7 +134,7 @@ for raw in sys.stdin:
 
     blocked = False
 
-    # URL host check: extract_host returns the canonical LDH hostname so
+    # URL host check: extract_host returns the canonical hostname so
     # that pastebin.com;junk, pastebin.com:443, pastebin.com#frag, etc all
     # collapse to pastebin.com before the suffix-anchored host_re fires.
     # Subdomain match (foo.pastebin.com) handled via (?:^|\.) anchor.
@@ -127,11 +142,22 @@ for raw in sys.stdin:
     if host and host_re.search(host):
         blocked = True
 
-    # Content body scan. \b word-boundary anchors are deliberate: we want
-    # pastebin.com to match in scraped text but not in pastebin.community.
-    # Note \b uses Python's \w which includes underscore, so a content
-    # snippet "_pastebin.com_" would not match — acceptable since that
-    # token isn't actually a hostname reference.
+    # Embedded-URL defense-in-depth: scan the URL string itself for any
+    # blocklisted hostname token. Catches cases where the primary URL
+    # navigates to a benign host but encodes a blocklisted destination
+    # in its query/path (e.g. https://safe.com/?u=https://pastebin.com/x
+    # or https://safe.com/?to=pastebin.com — orchestrators that follow
+    # such redirect-style params would scrape the embedded host). Decode
+    # percent-encoding first so https%3A%2F%2Fpastebin.com is also caught.
+    if not blocked and isinstance(url, str) and url:
+        try:
+            decoded_url = unquote(url)
+        except Exception:
+            decoded_url = url
+        if url_embedded_re.search(decoded_url):
+            blocked = True
+
+    # Content body scan for any blocklisted host reference in scraped text.
     if not blocked and isinstance(content, str) and content_re.search(content):
         blocked = True
 
