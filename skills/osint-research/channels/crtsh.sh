@@ -48,7 +48,7 @@ for entry in data:
     nv = entry.get("name_value", "")
     for name in nv.split("\n"):
         name = name.strip().lstrip("*.")
-        if name and name not in seen and name.endswith(target):
+        if name and name not in seen and (name == target or name.endswith('.' + target)):
             seen.add(name)
             url = f"https://crt.sh/?q=%25.{target}"
             out = {

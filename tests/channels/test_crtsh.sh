@@ -19,4 +19,10 @@ assert_contains "$got" '"channel":"crtsh"' "channel label"
 bash "$CRT" --type domain --target "" >/dev/null 2>&1
 assert_exit_code 1 $? "empty target fails"
 
+# Critical regression: notexample.com must NOT match target example.com
+bad_fixture='[{"name_value":"notexample.com\nlegit.example.com"}]'
+bad_got=$(bash "$CRT" --type domain --target example.com --fixture <(printf '%s' "$bad_fixture"))
+assert_not_contains "$bad_got" "notexample.com" "rejects suffix-but-not-subdomain"
+assert_contains "$bad_got" "legit.example.com" "still extracts legitimate subdomain"
+
 assert_summary
