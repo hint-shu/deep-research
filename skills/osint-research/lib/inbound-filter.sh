@@ -40,6 +40,7 @@ _py_tmp=$(mktemp)
 trap 'rm -f "$_py_tmp"' EXIT
 cat > "$_py_tmp" <<'PY'
 import os, re, sys, json
+from urllib.parse import urlparse
 
 host_alt = os.environ.get("HOST_ALT", "")
 if not host_alt:
@@ -51,7 +52,29 @@ if not host_alt:
 
 host_re = re.compile(r"(?:^|\.)(?:" + host_alt + r")$", re.IGNORECASE)
 content_re = re.compile(r"\b(?:" + host_alt + r")\b", re.IGNORECASE)
-url_host_re = re.compile(r"^https?://(?:[^/@]*@)?([^/]+)", re.IGNORECASE)
+
+
+def extract_host(url):
+    """Return canonical lowercased hostname or '' if none.
+
+    urlparse handles port-stripping, userinfo, IPv6 brackets, capitalised
+    scheme. We additionally strip the optional trailing dot (FQDN root)
+    so blocklisted-host suffix matching works against pastebin.com. as
+    well as pastebin.com.
+    """
+    if not isinstance(url, str) or not url:
+        return ""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return ""
+    if parsed.scheme.lower() not in ("http", "https"):
+        return ""
+    host = (parsed.hostname or "").lower()
+    if host.endswith("."):
+        host = host[:-1]
+    return host
+
 
 filtered = 0
 for raw in sys.stdin:
@@ -71,10 +94,9 @@ for raw in sys.stdin:
 
     blocked = False
 
-    if isinstance(url, str):
-        m = url_host_re.match(url)
-        if m and host_re.search(m.group(1)):
-            blocked = True
+    host = extract_host(url)
+    if host and host_re.search(host):
+        blocked = True
 
     if not blocked and isinstance(content, str) and content_re.search(content):
         blocked = True

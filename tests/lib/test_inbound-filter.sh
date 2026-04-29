@@ -99,4 +99,48 @@ rm -f /tmp/inbound-filter-err9
 assert_eq "$got_stdout" "" "malformed JSON line is dropped (cannot inspect)"
 assert_contains "$got_stderr" "filtered=1" "malformed JSON counted as filtered"
 
+# --- Fix #7 — URL host bypasses via port / query / fragment / trailing-dot ---
+# Earlier [^/]+ host capture was anchored only on / so any non-slash trailing
+# character (port, ?, #, ;, .) made the host_re $ anchor fail. Replaced with
+# urllib.parse.urlparse which returns the canonical hostname stripped of all
+# of these. Defensive: lowercase + strip trailing dot.
+
+# Port number on host
+got=$(printf '%s' '{"url":"https://pastebin.com:443/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with port (:443) still blocked"
+
+# Query string immediately after host
+got=$(printf '%s' '{"url":"https://pastebin.com?q=foo","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with query string still blocked"
+
+# Fragment immediately after host
+got=$(printf '%s' '{"url":"https://pastebin.com#frag","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with fragment still blocked"
+
+# Trailing dot (FQDN root)
+got=$(printf '%s' '{"url":"https://pastebin.com./x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "host with trailing dot still blocked"
+
+# Port on subdomain of blocklisted host
+got=$(printf '%s' '{"url":"https://x.pastebin.com:8080/y","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "subdomain with port still blocked"
+
+# Capitalised host (urlparse already lowercases hostname; defense-in-depth)
+got=$(printf '%s' '{"url":"https://PASTEBIN.COM/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "uppercase host still blocked"
+
+# Capitalised scheme
+got=$(printf '%s' '{"url":"HTTPS://pastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_eq "$got" "" "uppercase scheme still blocked"
+
+# --- Negative — non-blocklisted host with a port still passes ---
+got=$(printf '%s' '{"url":"https://example.com:8080/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "example.com" "clean host with port passes through"
+
+# --- Negative — string ending in blocklisted host but not a subdomain ---
+# notexample.com vs example.com — ensure (?:^|\.) anchor still rejects.
+# Replace example.com with pastebin.com to test against the actual blocklist.
+got=$(printf '%s' '{"url":"https://notpastebin.com/x","content":"y"}' | bash "$FILTER" 2>/dev/null)
+assert_contains "$got" "notpastebin.com" "host that only suffix-matches blocklisted is NOT blocked"
+
 assert_summary
