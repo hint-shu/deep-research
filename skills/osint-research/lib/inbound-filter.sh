@@ -24,6 +24,9 @@ BLOCKLIST="$DEFAULT_BLOCKLIST $EXTRA"
 host_alt=""
 for h in $BLOCKLIST; do
     [ -z "$h" ] && continue
+    # Reject tokens with regex metacharacters or shell weirdness — only allow
+    # hostname-shaped strings (alnum, dot, hyphen).
+    [[ "$h" =~ ^[a-zA-Z0-9.-]+$ ]] || continue
     esc=$(printf '%s' "$h" | sed 's/\./\\./g')
     host_alt="${host_alt}|${esc}"
 done
@@ -36,7 +39,7 @@ while IFS= read -r line || [ -n "$line" ]; do
     url=$(printf '%s' "$line" | perl -ne 'print $1 if /"url"\s*:\s*"([^"]*)"/')
     content=$(printf '%s' "$line" | perl -ne 'print $1 if /"content"\s*:\s*"([^"]*)"/')
 
-    host=$(printf '%s' "$url" | perl -ne 'print $1 if m{^https?://([^/]+)}')
+    host=$(printf '%s' "$url" | perl -ne 'if (m{^https?://([^/]+)}) { my $h = $1; $h =~ s/^[^@]*@//; print $h }')
 
     block=0
     if [ -n "$host" ] && printf '%s' "$host" | perl -ne "exit 0 if /(?:^|\\.)($host_alt)$/i; exit 1"; then
